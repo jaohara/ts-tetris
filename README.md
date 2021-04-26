@@ -3,6 +3,8 @@ Written by John O'Hara
 
 A browser-based tetris clone made in TypeScript.
 
+[Live version.](https://jaohara.com/tetris)
+
 ## Structure
 
 The project structure is a little jumbled right now - all three of the relevant classes for the game are contained in the same file, `tetris.ts`. From top to bottom you've got classes for `Tetromino`, `Well`, and `Tetris`.
