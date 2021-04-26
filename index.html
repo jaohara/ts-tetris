@@ -1,0 +1,40 @@
+<html>
+    <head>
+        <title>Tetris Project</title>
+        <link rel="preconnect" href="https://fonts.gstatic.com">
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="styles.css">
+    </head>
+
+    <body>
+        <div id="content-wrapper">
+            <div id="main-content">
+                <h1>Tetris</h1>
+                <p>The Soviet mind game</p>
+                <p><em>build: <span id="build-timestamp"></span></em></p>
+
+                <canvas id="main-canvas" width="800" height="600"></canvas>
+
+                <p>
+                    <button id="start-button">Start</button>
+                    <button id="stop-button">Stop</button>
+                </p>
+
+                <h1>Controls</h1>
+                <p>It's Tetris! You know what's up.</p>
+                <ul>
+                    <li>Left / Right -> Move</li>
+                    <li>Up -> Clockwise Rotate</li>
+                    <li>Down -> Soft Drop</li>
+                    <li>Space -> Hard Drop</li>
+                    <li>F -> Hold Piece / Swap Held Piece</li>
+                    <li>Esc / P -> Pause</li>
+                </ul>
+            </div>
+        </div>
+    </body>
+
+    <!-- gross little hack -->
+    <script>var exports = {};</script>
+    <script src="tetris.js"></script>
+</html>

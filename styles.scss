@@ -1,0 +1,197 @@
+$blue:          #3498db;
+$grey-darker:   #282c34;
+$grey-darkest:  #1b1d24;
+$mint:          #68e4b6;
+$purple:        #946fd1;
+$purple-light:  #a38ecc;
+$red:           #ef596f;
+
+$font-color:    #bbb;
+$font-lighter:  #ddd;
+
+* {
+  color: $font-color;
+  font-family: "JetBrains Mono", monospace;
+
+}
+
+body {
+  background: $grey-darkest;
+  border-top: 10px solid $blue;
+  height: 100vh;
+  margin: 0;
+  overflow: auto;
+}
+
+// canvas stuff
+
+canvas {
+  border: 4px solid $blue;
+  border-radius: 4px;
+}
+
+button {
+  background: $mint;
+  border: 0px;
+  border-radius: 4px;
+  color: $grey-darker;
+  font-size: 1.5em;
+  margin: .5em;
+  padding: .5em;
+  transition: background .3s;
+
+  &:hover{
+    background: $blue;
+    cursor: pointer;
+  }
+}
+
+
+// layout stuff
+div#content-wrapper{
+  // background: #3498db;
+  align-items: stretch;
+  background: linear-gradient(2deg, $mint 0%, $blue 100%);
+  display: flex;
+  justify-content: space-between;
+  margin: 75px auto;
+  width: 75%;
+
+  header, #main-content {
+    background: $grey-darkest;
+  }
+
+  header {
+    flex: initial;
+    line-height: 1.2em;
+    height: 100%;
+    margin: 0;
+    padding: 2em;
+    text-align: right;
+    width: 200px;
+
+    h1 {
+      font-family: "Josefin Slab", serif;
+      font-weight: bold;
+      font-size: 3.8em;
+      line-height: 1.0em;
+      text-align: left;
+      transition: transform .2s;
+
+      &:hover{
+        cursor: pointer;
+        transform: scale(1.04);
+      }
+    }
+  }
+
+  #main-content {
+    margin-left: .6em;
+    padding: 2em 2.5em 2em 2em;
+    flex: 1 1 300px;
+  }
+}
+
+@media only screen and (max-width: 900px){
+  div#content-wrapper {
+    margin: 0 auto;
+    width: 90%;
+  }
+}
+
+
+// Headers
+h1, h2, h3, h4, h5, h6, a {
+  color: $mint;
+}
+
+// Main Content
+#main-content {
+  line-height: 1.6em;
+  text-align: justify;
+
+  // link-related stuff
+  a {
+    box-shadow: 0px 1px 0px $mint;
+    text-decoration: none;
+    transition: background-color .1s, box-shadow .1s, border-radius .1s, margin .1s, padding .1s;
+
+    &:hover {
+      background-color: $grey-darker;
+      box-shadow: 0px 4px 0px $mint;
+      margin: 0 -.2em;
+      padding: 0 .2em
+    }
+  }
+
+  // highlighting significance
+  em, strong {
+    background-color: $grey-darker;
+    border-radius: 2px;
+    color: $font-lighter;
+    padding: .2em .3em;
+    margin: -.2em -.3em;
+  }
+
+  code {
+    color: $blue;
+  }
+
+  // list-related stuff
+  ul {
+    list-style: none;
+
+    // handle the special bullet point styling
+    & li::before {
+      color: $mint;
+      //content: "\204C"; // left bullet symbol
+      content: "\25B6"; // right-pointing solid triangle
+      //content: "\2724"; // 4-spoked balloon asterisk
+      display: inline-block;
+      margin-left: -1em;
+      width: 1em;
+    }
+  }
+
+  blockquote {
+    border-left: 1em solid $grey-darker;
+    padding-left: 1em;
+  }
+
+  form {
+    button, input, textarea {
+      border-radius: 4px;
+      font-size: 1.2em;
+      outline: none;
+      padding: .5em;
+    }
+
+    input, textarea {
+      background: $grey-darker;
+      border: 0px;
+    }
+
+    textarea {
+      min-height: 8.0em;
+      width: 70%;
+    }
+
+    button {
+      background-color: $mint;
+      border-radius: 4px;
+      border: 0;
+      color: $grey-darker;
+    }
+
+    label {
+      color: $mint;
+      font-size: 1.2em;
+      margin-left: 1.2em;
+    }
+
+  }
+}
+
+.hidden {
+  display: none;
+}
