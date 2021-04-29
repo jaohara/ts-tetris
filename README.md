@@ -23,7 +23,7 @@ The class that represents the current game board. `Well.grid` is the state of th
 
 ### `Tetris`
 
-This class represents the game state and the pieces that comprise it. An instance of this is instantiated as `game` when the script is loaded, and the main game loop is set into motion by calling `Tetris.start()`.
+This class represents the game state, and the pieces that comprise it. An instance of this is instantiated as `game` when the script is loaded, and the main game loop is set into motion by calling `Tetris.start()`.
 
 Contains both readonly settings fields that are modified before compiling and fields containing the game state that are modified at runtime. The main game loop is handled via `setInterval`, and a reference to this interval is stored at `this.gameTimer`. 
 
