@@ -412,7 +412,6 @@ var Tetris = /** @class */ (function () {
                 // update loop timer
                 if (!_this.paused) {
                     var addedTime = Date.now() - _this.previousLoopTime;
-                    console.log("Adding " + addedTime + " to elapsed time...");
                     _this.elapsedTime += Date.now() - _this.previousLoopTime;
                 }
                 _this.previousLoopTime = Date.now();

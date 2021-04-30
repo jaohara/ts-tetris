@@ -501,7 +501,6 @@ class Tetris {
                 // update loop timer
                 if (!this.paused){
                     let addedTime = Date.now() - this.previousLoopTime;
-                    console.log(`Adding ${addedTime} to elapsed time...`);
                     this.elapsedTime += Date.now() - this.previousLoopTime;
                 }
 
