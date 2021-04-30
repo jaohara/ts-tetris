@@ -79,26 +79,45 @@ class Tetromino {
         ]
     }
 
-    gravity: NodeJS.Timeout;
+    gravity: NodeJS.Timeout = null;
+    moveLock: boolean;
+    moveQueue: MoveQueue;
 
     readonly isGhost: boolean;
     readonly pieceType;
 
-    private ghost: Tetromino;
-    private pos: string[];
-    private rotation = [0, 1, 2, 3];
+    private readonly ghost: Tetromino;
+    private readonly game: Tetris;
     private readonly well: Well;
 
-    constructor(pieceType: string, well: Well, isGhost: boolean = false, pos: string[] = null) {
+
+    // DEBUG
+    private moveCount = 0;
+
+    private pos: string[];
+    private rotation = [0, 1, 2, 3];
+
+    constructor(pieceType: string, game: Tetris, well: Well, isGhost: boolean = false, pos: string[] = null) {
         if (Tetromino.pieceTypes.includes(pieceType)){
+            this.game = game;
             this.isGhost = isGhost;
+            this.moveLock = false;
+            this.moveQueue = new MoveQueue();
             this.pieceType = pieceType;
             this.pos  = isGhost ? pos : Tetromino.startPositions[pieceType];
             this.well = well;
 
+            let validSpawn = true;
+            for (let position of this.pos){
+                validSpawn = this.checkValidMove(position.split(":").map(x => parseInt(x)));
+            }
+
+            if (!validSpawn){
+                this.game.stop();
+            }
+
             if (!isGhost) {
-                console.log("Making ghost piece...");
-                this.ghost = new Tetromino(this.pieceType, this.well, true, this.pos);
+                this.ghost = new Tetromino(this.pieceType, this.game, this.well, true, this.pos);
             } else {
                 this.hardDrop();
             }
@@ -111,27 +130,19 @@ class Tetromino {
 
     hardDrop() {
         let keepDroppin = true;
+        let dropScore = 0;
 
         do {
-            keepDroppin = this.updatePos("down");
+            keepDroppin = this.move("down");
+            dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
         } while (keepDroppin);
+
+        if (!this.isGhost){
+            this.game.addScore(dropScore);
+        }
     }
 
     rotate(direction: string): boolean{
-        /*
-            Todo: I-piece rotation problem
-
-            There's a problem with rotating a newly spawned I - since it would rotate out
-            of the top bounds of the well, it doesn't let you rotate the piece until it is
-            already 3 cells down. What probably should happen is that the top of the well
-            should "push" the piece down - that is, if you rotate it, it allows it to rotate
-            outside of the bounds before pushing it back down so the topmost block is still
-            in row 0.
-
-            Ya know, I kind of get the wisdom of having those extra four dead rows off-screen
-            now.
-         */
-
         let transform: string[]
         let validMove = true;
         let newPos = [];
@@ -144,25 +155,24 @@ class Tetromino {
             transform = Tetromino.rotationTransforms[this.pieceType][this.rotation[0]];
         }
 
-        console.log(`transform: ${transform}`);
+        // todo: remove debug lines
+        //console.log(`R this.pos: ${this.pos}`);
+        //console.log(`R transform: ${transform}`);
 
         for (let i = 0; i < transform.length && validMove; i++) {
             let blockRotation = transform[i].split(":").map(x => parseInt(x));
             // remember - [0] is y, [1] is x here (row, column)
             let currentPos = this.pos[i].split(":").map(x => parseInt(x));
 
-            console.log(`blockRotation: ${blockRotation}`);
-            console.log(`currentPos: ${currentPos}`);
-
-            currentPos[1] += blockRotation[0];
-            currentPos[0] += blockRotation[1];
+            currentPos[1] += direction === "right"? blockRotation[0] : blockRotation[0] * -1;
+            currentPos[0] += direction === "right"? blockRotation[1] : blockRotation[1] * -1;
 
             newPos[i] = currentPos.join(":");
 
             validMove = this.checkValidMove(currentPos);
         }
 
-        if (validMove) {
+        if (validMove === true) {
             this.pos = newPos;
 
             if (!this.isGhost) {
@@ -170,18 +180,29 @@ class Tetromino {
                 this.ghost.hardDrop();
             }
         }
+        else {
+            // FUCK YOU BUG, RESET THAT GODDAMN ARRAY
+            if (direction === "right") {
+                this.rotation.unshift(this.rotation.pop());
+            } else {
+                this.rotation.push(this.rotation.shift());
+            }
+        }
 
+        this.moveLock = false;
+
+        this.nextMove();
         return validMove;
     }
 
-    updatePos(direction: string): boolean {
+    move(direction: string): boolean {
         // check to see if valid move
         let validMove = true;
 
         // check direction and make sure it can move in a certain way
-        let xDirection = direction == "down" ? 0 : 1;
+        let xDirection = direction == "down" || direction == "gravity" ? 0 : 1;
         xDirection *= direction == "left" ? -1 : 1;
-        let yDirection = direction == "down" ? 1 : 0;
+        let yDirection = direction == "down" || direction == "gravity" ? 1 : 0;
 
         let newPos = [];
 
@@ -198,14 +219,22 @@ class Tetromino {
             this.pos = newPos;
 
             if (!this.isGhost) {
-                //this.ghost.updatePos(direction);
+                if (direction === "down") {
+                    this.game.addScore(1);
+                }
+
                 this.ghost.setPos(this.pos);
                 this.ghost.hardDrop();
             }
         } else if (direction === "down" && !this.isGhost) {
+            // I was also checking '|| direction === "gravity"', but that was causing a bug, and
+            // it seems to be working without it? I should keep an eye on this
             this.well.lockPiece(this);
         }
 
+        this.moveLock = false;
+
+        this.nextMove();
         return validMove;
     }
 
@@ -220,10 +249,51 @@ class Tetromino {
         }
     }
 
+    private nextMove(): void {
+        if (this.moveQueue.size() > 0){
+            let nextMove = this.moveQueue.dequeue().split(":");
+
+            console.log(`Dequeued move: ${nextMove.join(":")}`);
+
+            if (nextMove[0] == "move"){
+                this.move(nextMove[1]);
+            } else if (nextMove[0] == "rotate"){
+                this.rotate(nextMove[1]);
+            }
+        }
+    }
+
     private checkValidMove(position: number[]): boolean {
-        return  !(position[0] < 0 || position[0] >= this.well.getHeight() ||
+        // first one changed from 0, I think this will allow the rotation over the top...
+        return  !(position[0] < -3 || position[0] >= this.well.getHeight() ||
             position[1] < 0 || position[1] >= this.well.getWidth() ||
-            this.well.getGrid()[position[0]][position[1]] != 0);
+            position[0] > 0 && this.well.getGrid()[position[0]][position[1]] != 0);
+    }
+}
+
+/**
+ * MoveQueue - a simple queue implementation that Tetromino uses to store moves that
+ * are requested while it is already performing a move.
+ *
+ * I don't really know if this is needed, at all. Originally I thought this was a
+ * solution to the rotation bug - not only was it not that, but the methods never
+ * even get called, implying that there's never a situation where multiple moves are
+ * happening at the same time, meaning that this class doesn't really serve a purpose.
+ */
+class MoveQueue {
+    private queue: string[] = [];
+
+    enqueue(move: string): void {
+        this.queue.push(move);
+    }
+
+    // I kinda don't like allowing it to return undefined, but I guess it makes sense
+    dequeue(): string | undefined {
+        return this.queue.shift();
+    }
+
+    size(): number {
+        return this.queue.length;
     }
 }
 
@@ -248,7 +318,10 @@ class Well {
 
     constructor(game: Tetris){
         this.game = game;
+        this.resetWell();
+    }
 
+    resetWell(): void {
         for (let row = 0; row < this.height; row++){
             this.grid[row] = [];
 
@@ -272,6 +345,7 @@ class Well {
 
     clearLines() {
         this.game.setSpawnLock(true);
+        let linesCleared = 0;
 
         // how would I do something with a pause or animation on line clear?
         for (let row = this.getHeight() - 1; row > 0; row--){
@@ -287,10 +361,12 @@ class Well {
 
                 this.grid.unshift(replacementRow);
 
+                this.game.lineClear();
+                linesCleared++;
+
                 // continue checking from this spot
                 row++;
             }
-
             /*
                 Here's an idea - I don't think a piece could be floating, so we could
                 probably stop this loop from checking the first time we hit a row of
@@ -302,6 +378,19 @@ class Well {
                 whatever the syntax would be, then it sets a boolean to true and breaks
                 the loop
              */
+        }
+
+        // handle scoring
+        if (linesCleared > 0){
+            let lineScore = (200 * linesCleared);
+            lineScore -= linesCleared < 4 ? 100 : 0;
+            lineScore *= this.game.getLevel();
+
+            console.log(`linesCleared: ${linesCleared} - lineScore: ${lineScore}`);
+            let lineString = linesCleared == 1 ? `${linesCleared} line,` : linesCleared == 4 ?
+                "TETRIS!" : `${linesCleared} lines,`;
+            this.game.log(`${lineString} scored ${lineScore}`);
+            this.game.addScore(lineScore);
         }
 
         this.game.setSpawnLock(false);
@@ -334,6 +423,7 @@ class Tetris {
     private readonly blockSize = 24;
     private readonly DEBUG = true;
     private readonly frameRate = 60;
+    // private readonly frameRate = 10;
     // were I a smarter man I'd use the formula, but I'm not, so this works
     private readonly gameSpeed = [
         0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0899,
@@ -344,20 +434,32 @@ class Tetris {
     private readonly updateFrequency = 1000 / this.frameRate;
 
     private readonly controls = [
-        "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab"
+        "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
+        "e", "n", "Enter"
     ];
 
     // game state
     private activePiece: Tetromino = null;
+    private elapsedTime: number;
+    private gameLoop: NodeJS.Timeout;
+    private gameOver: boolean = true;
     private gameTimer: NodeJS.Timeout;
     private gameLevel: number;
     private ghostPiece: Tetromino = null;
     private heldPiece: Tetromino = null;
     private holdLock: boolean = false;
+    private linesCleared: number;
     private paused: boolean;
     private pieceBag: string[] = [];
     private running: boolean;
+    private score: number;
     private spawnLock: boolean;
+    private titleScreen: boolean = true;
+
+
+    // TODO: REMOVE AFTER DEBUG... maybe?
+    diagMessage: string[];
+    private readonly logLength: number = 24;
 
 
     // graphics stuff
@@ -387,15 +489,25 @@ class Tetris {
     start(): void {
         if (!this.running) {
             this.running = true;
-            // todo: only set this to 1 on gamestart
-            this.gameLevel = 1;
 
             // add controls
             document.addEventListener("keydown", Tetris.pollInput);
 
+            //this.newGame();
+
             // MAIN GAME LOOP
-            this.gameTimer = setInterval(() => {
-                if (!this.paused) {
+            this.gameLoop = setInterval(() => {
+                if (!this.titleScreen && !this.paused && !this.gameOver) {
+                    // check for levelup
+                    if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15){
+                        this.gameLevel++;
+                        this.log("level up!");
+                        clearInterval(this.activePiece.gravity);
+                        this.activePiece.gravity = null;
+                    }
+
+                    // check if piece bag is exhausted
+                    // todo: store two piece bags so you can have a long prediction of pieces?
                     if (this.pieceBag.length <= 0) {
                         this.newPieceBag();
                     }
@@ -407,69 +519,132 @@ class Tetris {
 
                     // create new piece if one doesn't exist
                     if (this.activePiece == null && !this.spawnLock) {
-                        this.activePiece = new Tetromino(this.pieceBag.pop(), this.well);
+                        this.activePiece = new Tetromino(this.pieceBag.pop(), game, this.well);
                         this.ghostPiece  = this.activePiece.getGhost();
+                    }
 
+                    if (this.activePiece.gravity === null){
                         this.activePiece.gravity = setInterval(() => {
                             if (!this.paused) {
-                                let falling = this.activePiece.updatePos("down");
+                                if (!this.activePiece.moveLock) {
+                                    let falling = this.activePiece.move("gravity");
 
-                                if (!falling) {
-                                    this.well.lockPiece(this.activePiece);
+                                    if (!falling) {
+                                        this.well.lockPiece(this.activePiece);
+                                    }
+                                }
+                                else {
+                                    this.activePiece.moveQueue.enqueue(`move:gravity`);
                                 }
                             }
                         }, (this.updateFrequency / this.gameSpeed[this.gameLevel]));
                     }
                 }
+                else if (this.gameOver){
+                    // todo: GAME OVER STATE
+                    //console.log("Game over, man!");
+                    this.drawGameOver();
+                }
+                else if (this.titleScreen) {
+                    this.drawTitle();
+                }
 
+                // render board
                 this.draw();
             }, this.updateFrequency);
-        } else {
+        }
+        else {
             console.log("Game is already running.");
         }
     }
 
+    // todo: Make this more of a game-over state
     stop(): void {
         if (this.running) {
-            console.log("Stopping game loop...");
-            this.running = false;
-            clearInterval(this.gameTimer);
-            console.log("Removing keydown listener...");
-            document.removeEventListener("keydown", Tetris.pollInput);
+            this.gameOver = true;
+            //this.running = false;
+            //clearInterval(this.gameLoop);
+            //document.removeEventListener("keydown", Tetris.pollInput);
         } else {
             console.log("Game isn't running.");
         }
     }
 
+    // todo: have a pause menu controllable by arrow keys
     pause(): void {
         this.paused = !this.paused;
+        console.log(`game ${this.paused ? "paused" : "unpaused"}`);
     }
 
     private static pollInput(event: KeyboardEvent): void {
         if (game.controls.includes(event.key)){
             event.preventDefault();
-            console.log(`Recorded keypress: ${event.key}`);
+            //console.log(`Recorded keypress: ${event.key}`);
 
             let key = event.key.includes("Arrow") ?
                 event.key.slice(5).toLowerCase() : event.key;
 
-            if (key === "Escape" || key === "p"){
-                game.pause();
+            if (!game.titleScreen && !game.gameOver) {
+                if (key === "Escape" || key === "p") {
+                    game.pause();
+                } else if (game.activePiece !== null && !game.paused) {
+                    if (["left", "right", "down"].includes(key)) {
+                        if (game.activePiece.moveLock) {
+                            game.activePiece.moveQueue.enqueue(`move:${key}`);
+                        } else {
+                            game.activePiece.move(key);
+                        }
+                    } else if (key === "up" || key === "e") {
+                        let direction = key == "up" ? "right" : "left";
+
+                        if (game.activePiece.moveLock) {
+                            game.activePiece.moveQueue.enqueue(`rotate:${direction}`);
+                        } else {
+                            game.activePiece.rotate(direction);
+                        }
+                    } else if (key === " ") {
+                        game.activePiece.hardDrop();
+                    } else if (key === "f") {
+                        game.holdPiece();
+                    }
+                }
             }
-            else if (game.activePiece !== null && !game.paused) {
-                if (["left", "right", "down"].includes(key)){
-                    game.activePiece.updatePos(key);
-                }
-                else if (key === "up") {
-                    game.activePiece.rotate("right");
-                }
-                else if (key === " ") {
-                    game.activePiece.hardDrop();
-                } else if (key === "f"){
-                    game.holdPiece();
+            else {
+                if (key === "Enter" || key === "n"){
+                    game.newGame();
                 }
             }
         }
+    }
+
+    private newGame(): void{
+        // reset game state
+
+        this.diagMessage = [];
+        // todo: allow for starting at a higher level?
+        this.gameLevel = 1;
+        this.gameOver = false;
+        this.linesCleared = 0;
+        this.score = 0;
+        this.titleScreen = false;
+        this.well.resetWell();
+
+
+        //this.gameTimer
+
+        this.log("new game started");
+    }
+
+    lineClear(): void {
+        this.linesCleared++;
+    }
+
+    addScore(score: number): void{
+        this.score += score;
+    }
+
+    getLevel(): number{
+        return this.gameLevel;
     }
 
     private draw(): void {
@@ -478,7 +653,10 @@ class Tetris {
         this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
 
         // draw Grid
-        this.drawGrid();
+        if (!this.gameOver) {
+            this.drawGrid();
+        }
+
         this.drawPause();
 
         // draw diagnostics
@@ -521,57 +699,132 @@ class Tetris {
                     this.context.fillStyle = this.colorArray[grid[row][col]];
                 }
 
-                // goodnight, sweet ternary operator
-                /*
-                this.context.fillStyle = this.colorArray[piecePos.includes(`${row}:${col}`) ?
-                    Tetris.getPieceColorIndex(this.activePiece) :
-                    ghostPos.includes(`${row}:${col}`) ?
-                        Tetris.getPieceColorIndex(this.ghostPiece) : grid[row][col]];
-                 */
-
                 this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
             }
         }
     }
 
+    // I should probably make this not only on debug and rename it to "drawUI" or something
     private drawDiag() {
         if (this.DEBUG) {
-            // maybe make this universal?
-            this.context.fillStyle = '#bbb';
-            this.context.font = '1.0em "JetBrains Mono"';
+            if (!this.gameOver) {
+                // maybe make this universal?
+                this.context.fillStyle = '#bbb';
+                this.context.font = '1.0em "JetBrains Mono"';
 
-            this.context.fillText(
-                `activePiece: ${this.activePiece === null ? null : this.activePiece.pieceType}`,
-                20, 20, 200);
-            this.context.fillText(`activePiece.pos:`, 20, 60, 200);
-            this.context.fillText(`${this.activePiece === null ? null : this.activePiece.getPos()}`,
-                40, 80, 200);
 
-            this.context.fillText(`ghostPiece.pos:`, 20, 120, 200);
-            this.context.fillText(`${this.ghostPiece === null ? null : this.ghostPiece.getPos()}`,
-                40, 140, 200);
+                // left side
 
-            this.context.fillText(
-                `nextPiece: ${this.pieceBag !== null ? this.pieceBag[this.pieceBag.length-1] : null}`,
-                20, 180, 200);
+                // active piece location
+                /*
+                this.context.fillText(
+                    `activePiece: ${this.activePiece === null ? null : this.activePiece.pieceType}`,
+                    20, 20, 200);
+                this.context.fillText(`activePiece.pos:`, 20, 60, 200);
+                this.context.fillText(`${this.activePiece === null ? null : this.activePiece.getPos()}`,
+                    40, 80, 200);
 
-            this.context.fillText(
-                `heldPiece: ${this.heldPiece !== null ? this.heldPiece.pieceType : null}`,
-                20, 220, 200);
+                // ghost piece location
+                this.context.fillText(`ghostPiece.pos:`, 20, 120, 200);
+                this.context.fillText(`${this.ghostPiece === null ? null : this.ghostPiece.getPos()}`,
+                    40, 140, 200);
+                */
+
+                // next piece
+                this.context.fillText(
+                    `nextPiece: ${this.pieceBag !== null ? this.pieceBag[this.pieceBag.length - 1] : null}`,
+                    20, 20, 200);
+                // held piece
+                this.context.fillText(
+                    `heldPiece: ${this.heldPiece !== null ? this.heldPiece.pieceType : null}`,
+                    20, 60, 200);
+
+
+                //right side
+
+                // level
+                this.context.fillText(`gameLevel: ${this.gameLevel}`, 580, 20, 200);
+
+                // lines cleared
+                this.context.fillText(`linesCleared: ${this.linesCleared}`, 580, 60, 200);
+
+                // score
+                this.context.fillText(`score: ${this.score}`, 580, 100, 200);
+
+                // gametime
+                this.context.fillText(`gameTime: ${null}`, 580, 140, 200);
+
+                // draw that diag message
+                this.context.fillStyle = this.fontColor;
+                this.context.font = "0.8em JetBrains Mono";
+
+                for (let i = 0; i < this.diagMessage.length; i++) {
+                    this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
+                    this.context.fillText(`${this.diagMessage[i]}`,
+                        20, (i * 20) + 100, 200);
+                }
+            }
+            else if (this.titleScreen) {
+                this.drawTitle();
+            }
+            else {
+                this.drawGameOver();
+            }
         }
     }
 
     private drawPause() {
         if (this.paused){
-            this.context.fillStyle = this.pauseColor;
-            this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+            this.drawOverlay();
 
             this.context.fillStyle = this.fontColor;
-
             this.context.font = "3.0em JetBrains Mono";
             this.context.fillText("Pause", this.canvas.width/3+64,
                 this.canvas.height/2, this.canvas.height/2);
         }
+    }
+
+    private drawGameOver(){
+        this.drawOverlay()
+
+        this.context.fillStyle = this.fontColor
+        this.context.font = "3.0em JetBrains Mono"
+        this.context.fillText("Game Over", this.canvas.width/3+50,
+            this.canvas.height/2, this.canvas.width);
+    }
+
+    private drawTitle() {
+        this.drawOverlay();
+
+        this.context.fillStyle = this.fontColor;
+        this.context.font = "5.0em JetBrains Mono";
+        this.context.fillText("Tetris", 20,
+            80, this.canvas.width);
+
+        this.context.font = "1.0em JetBrains Mono";
+
+        this.context.fillText("Programmed by John O'Hara in 2021",
+            40, 120, this.canvas.width/2);
+
+        this.context.fillText("Press Enter to Start",
+            this.canvas.width/3+50, 300, this.canvas.width/2);
+
+    }
+
+    // I think I could make this better, I'm not satisfied as it is
+    private drawOverlay(){
+        this.context.fillStyle = this.pauseColor;
+        this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+
+        /*
+        this.context.fillStyle = this.fontColor;
+
+        this.context.font = "3.0em JetBrains Mono";
+
+        this.context.fillText(message, this.canvas.width/3+64,
+            this.canvas.height/2, this.canvas.width/2);
+
+         */
     }
 
     lockActivePiece() {
@@ -588,7 +841,7 @@ class Tetris {
             let tempPiece = this.activePiece;
 
             this.activePiece = this.heldPiece !== null ?
-                new Tetromino(this.heldPiece.pieceType, this.well) : null;
+                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
             this.ghostPiece = this.activePiece !== null ?
                 this.activePiece.getGhost() : null;
 
@@ -599,6 +852,14 @@ class Tetris {
 
     setSpawnLock(state: boolean){
         this.spawnLock = state;
+    }
+
+    log(message: string){
+        if (this.diagMessage.length >= this.logLength){
+            this.diagMessage.pop();
+        }
+
+        this.diagMessage.unshift(message);
     }
 
     private static getPieceColorIndex(piece: Tetromino): number {

@@ -3,7 +3,7 @@
         <title>Tetris Project</title>
         <link rel="preconnect" href="https://fonts.gstatic.com">
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="styles.css">
+        <link rel="stylesheet" href="css/styles.css">
     </head>
 
     <body>
@@ -15,7 +15,7 @@
 
                 <canvas id="main-canvas" width="800" height="600"></canvas>
 
-                <p>
+                <p id="game-buttons">
                     <button id="start-button">Start</button>
                     <button id="stop-button">Stop</button>
                 </p>
@@ -23,8 +23,10 @@
                 <h1>Controls</h1>
                 <p>It's Tetris! You know what's up.</p>
                 <ul>
+                    <li>Enter / N -> Start Game</li>
                     <li>Left / Right -> Move</li>
                     <li>Up -> Clockwise Rotate</li>
+                    <li>E -> Counter-Clockwise Rotate</li>
                     <li>Down -> Soft Drop</li>
                     <li>Space -> Hard Drop</li>
                     <li>F -> Hold Piece / Swap Held Piece</li>
@@ -36,5 +38,5 @@
 
     <!-- gross little hack -->
     <script>var exports = {};</script>
-    <script src="tetris.js"></script>
+    <script src="js/tetris.js"></script>
 </html>
