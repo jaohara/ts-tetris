@@ -409,6 +409,13 @@ var Tetris = /** @class */ (function () {
             //this.newGame();
             // MAIN GAME LOOP
             this.gameLoop = setInterval(function () {
+                // update loop timer
+                if (!_this.paused) {
+                    var addedTime = Date.now() - _this.previousLoopTime;
+                    console.log("Adding " + addedTime + " to elapsed time...");
+                    _this.elapsedTime += Date.now() - _this.previousLoopTime;
+                }
+                _this.previousLoopTime = Date.now();
                 if (!_this.titleScreen && !_this.paused && !_this.gameOver) {
                     // check for levelup
                     if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
@@ -483,7 +490,6 @@ var Tetris = /** @class */ (function () {
     Tetris.pollInput = function (event) {
         if (game.controls.includes(event.key)) {
             event.preventDefault();
-            //console.log(`Recorded keypress: ${event.key}`);
             var key = event.key.includes("Arrow") ?
                 event.key.slice(5).toLowerCase() : event.key;
             if (!game.titleScreen && !game.gameOver) {
@@ -517,6 +523,7 @@ var Tetris = /** @class */ (function () {
                 }
             }
             else {
+                // should only be on game over and title screen states
                 if (key === "Enter" || key === "n") {
                     game.newGame();
                 }
@@ -526,6 +533,7 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.newGame = function () {
         // reset game state
         this.diagMessage = [];
+        this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
         this.gameOver = false;
@@ -533,7 +541,6 @@ var Tetris = /** @class */ (function () {
         this.score = 0;
         this.titleScreen = false;
         this.well.resetWell();
-        //this.gameTimer
         this.log("new game started");
     };
     Tetris.prototype.lineClear = function () {
@@ -600,20 +607,6 @@ var Tetris = /** @class */ (function () {
                 this.context.fillStyle = '#bbb';
                 this.context.font = '1.0em "JetBrains Mono"';
                 // left side
-                // active piece location
-                /*
-                this.context.fillText(
-                    `activePiece: ${this.activePiece === null ? null : this.activePiece.pieceType}`,
-                    20, 20, 200);
-                this.context.fillText(`activePiece.pos:`, 20, 60, 200);
-                this.context.fillText(`${this.activePiece === null ? null : this.activePiece.getPos()}`,
-                    40, 80, 200);
-
-                // ghost piece location
-                this.context.fillText(`ghostPiece.pos:`, 20, 120, 200);
-                this.context.fillText(`${this.ghostPiece === null ? null : this.ghostPiece.getPos()}`,
-                    40, 140, 200);
-                */
                 // next piece
                 this.context.fillText("nextPiece: " + (this.pieceBag !== null ? this.pieceBag[this.pieceBag.length - 1] : null), 20, 20, 200);
                 // held piece
@@ -625,8 +618,10 @@ var Tetris = /** @class */ (function () {
                 this.context.fillText("linesCleared: " + this.linesCleared, 580, 60, 200);
                 // score
                 this.context.fillText("score: " + this.score, 580, 100, 200);
+                var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
+                var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
                 // gametime
-                this.context.fillText("gameTime: " + null, 580, 140, 200);
+                this.context.fillText("gameTime: " + mins + ":" + secs, 580, 140, 200);
                 // draw that diag message
                 this.context.fillStyle = this.fontColor;
                 this.context.font = "0.8em JetBrains Mono";
