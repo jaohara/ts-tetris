@@ -18,12 +18,14 @@ var Tetromino = /** @class */ (function () {
         if (isGhost === void 0) { isGhost = false; }
         if (pos === void 0) { pos = null; }
         this.gravity = null;
+        this.lockDelay = null;
         // DEBUG
         this.moveCount = 0;
         this.rotation = [0, 1, 2, 3];
         if (Tetromino.pieceTypes.includes(pieceType)) {
             this.game = game;
             this.isGhost = isGhost;
+            this.lockPercentage = 0;
             this.moveLock = false;
             this.moveQueue = new MoveQueue();
             this.pieceType = pieceType;
@@ -45,14 +47,38 @@ var Tetromino = /** @class */ (function () {
             }
         }
     }
+    Tetromino.lockDelayTimer = function (piece) {
+        if (piece.lockPercentage > 99) { // we seem to get 99.99999... instead of 100 at the end
+            console.log("Resolving lock delay on " + piece + " - lockPercentage: " + piece.lockPercentage);
+            piece.lockPercentage = 0;
+            // I guess here we'll just lock the piece, right?
+            //clearInterval(piece.lockDelay);
+            //piece.lockDelay = null;
+            piece.removeLockDelay();
+            piece.well.lockPiece(piece);
+        }
+        else {
+            piece.lockPercentage += 100 / 30;
+        }
+    };
+    Tetromino.prototype.removeLockDelay = function () {
+        console.log("Removing lock delay...");
+        clearInterval(this.lockDelay);
+        this.lockDelay = null;
+        this.lockPercentage = 0;
+        console.log("Removed delay on " + this);
+    };
     Tetromino.prototype.getGhost = function () {
         return this.ghost;
+    };
+    Tetromino.prototype.getLockPercentage = function () {
+        return this.lockPercentage;
     };
     Tetromino.prototype.hardDrop = function () {
         var keepDroppin = true;
         var dropScore = 0;
         do {
-            keepDroppin = this.move("down");
+            keepDroppin = this.move("down", true);
             dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
         } while (keepDroppin);
         if (!this.isGhost) {
@@ -71,9 +97,6 @@ var Tetromino = /** @class */ (function () {
             this.rotation.unshift(this.rotation.pop());
             transform = Tetromino.rotationTransforms[this.pieceType][this.rotation[0]];
         }
-        // todo: remove debug lines
-        //console.log(`R this.pos: ${this.pos}`);
-        //console.log(`R transform: ${transform}`);
         for (var i = 0; i < transform.length && validMove; i++) {
             var blockRotation = transform[i].split(":").map(function (x) { return parseInt(x); });
             // remember - [0] is y, [1] is x here (row, column)
@@ -85,6 +108,12 @@ var Tetromino = /** @class */ (function () {
         }
         if (validMove === true) {
             this.pos = newPos;
+            // reset lock delay
+            if (this.lockPercentage > 0) {
+                //console.log("Attempting to reset lock delay...");
+                //this.lockPercentage = 0;
+                this.removeLockDelay();
+            }
             if (!this.isGhost) {
                 this.ghost.setPos(this.pos);
                 this.ghost.hardDrop();
@@ -103,9 +132,14 @@ var Tetromino = /** @class */ (function () {
         this.nextMove();
         return validMove;
     };
-    Tetromino.prototype.move = function (direction) {
+    Tetromino.prototype.move = function (direction, hardDrop) {
+        var _this = this;
+        if (hardDrop === void 0) { hardDrop = false; }
         // check to see if valid move
         var validMove = true;
+        if (direction === "gravity") {
+            console.log("Moving by gravity...");
+        }
         // check direction and make sure it can move in a certain way
         var xDirection = direction == "down" || direction == "gravity" ? 0 : 1;
         xDirection *= direction == "left" ? -1 : 1;
@@ -124,6 +158,17 @@ var Tetromino = /** @class */ (function () {
                 if (direction === "down") {
                     this.game.addScore(1);
                 }
+                if (direction !== "down" && this.lockPercentage > 0) {
+                    // reset lock delay
+                    if (direction === "gravity") {
+                        this.removeLockDelay();
+                    }
+                    else {
+                        console.log("Attempting to reset lock delay...");
+                        //this.lockPercentage = 0;
+                        this.removeLockDelay();
+                    }
+                }
                 this.ghost.setPos(this.pos);
                 this.ghost.hardDrop();
             }
@@ -131,7 +176,14 @@ var Tetromino = /** @class */ (function () {
         else if (direction === "down" && !this.isGhost) {
             // I was also checking '|| direction === "gravity"', but that was causing a bug, and
             // it seems to be working without it? I should keep an eye on this
+            //if (hardDrop || this.lockPercentage > 0){
             this.well.lockPiece(this);
+        }
+        else if (direction === "gravity" && !this.isGhost && this.lockPercentage == 0) {
+            console.log("Non valid move on a real piece due to gravity");
+            if (this.lockPercentage == 0 && this.lockDelay == null) {
+                this.lockDelay = setInterval(function () { Tetromino.lockDelayTimer(_this); }, this.game.updateFrequency);
+            }
         }
         this.moveLock = false;
         this.nextMove();
@@ -164,6 +216,9 @@ var Tetromino = /** @class */ (function () {
             position[1] < 0 || position[1] >= this.well.getWidth() ||
             position[0] > 0 && this.well.getGrid()[position[0]][position[1]] != 0);
     };
+    Tetromino.prototype.toString = function () {
+        return "[Tetromino: " + this.pieceType + (this.isGhost ? " - GHOST" : "") + "]";
+    };
     Tetromino.pieceTypes = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
     Tetromino.startPositions = {
         'I': ['0:3', '0:4', '0:5', '0:6'],
@@ -174,17 +229,9 @@ var Tetromino = /** @class */ (function () {
         'T': ['0:4', '1:3', '1:4', '1:5'],
         'Z': ['0:3', '0:4', '1:4', '1:5']
     };
-    /*
-        TODO: Some rotations are still going completely bonkers, where parts of
-            the piece rotate away from the rest of the piece - kind of looks like
-            the Game of Life. This happens frequently when a rotation is obstructed
-            in some way - most noticeably when rotating a vertical J-block in the
-            first position that is one block away from the left side of the well. I think
-            I've noticed it with either S/Z or T as well, and sometimes I.
-     */
     // this is madness - don't think about it too much!
     // state transitions:
-    // 1->2, 2->3, 3->4, 4->1
+    // 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
     Tetromino.rotationTransforms = {
         'I': [
             ['2:-1', '1:0', '0:1', '-1:2'],
@@ -370,12 +417,14 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
+        // timers from NodeJS.Timeoust 
         // game state
         this.activePiece = null;
         this.gameOver = true;
         this.ghostPiece = null;
         this.heldPiece = null;
         this.holdLock = false;
+        this.lockDelay = null;
         this.pieceBag = [];
         this.titleScreen = true;
         this.logLength = 24;
@@ -411,8 +460,10 @@ var Tetris = /** @class */ (function () {
             this.gameLoop = setInterval(function () {
                 // update loop timer
                 if (!_this.paused) {
-                    var addedTime = Date.now() - _this.previousLoopTime;
                     _this.elapsedTime += Date.now() - _this.previousLoopTime;
+                }
+                if (_this.activePiece !== null && _this.activePiece.getLockPercentage() > 0) {
+                    console.log("activePiece locking: " + _this.activePiece.getLockPercentage() + "%");
                 }
                 _this.previousLoopTime = Date.now();
                 if (!_this.titleScreen && !_this.paused && !_this.gameOver) {
@@ -434,8 +485,8 @@ var Tetris = /** @class */ (function () {
                     }
                     // create new piece if one doesn't exist
                     if (_this.activePiece == null && !_this.spawnLock) {
-                        _this.activePiece = new Tetromino(_this.pieceBag.pop(), game, _this.well);
-                        _this.ghostPiece = _this.activePiece.getGhost();
+                        console.log("this.activePiece: " + _this.activePiece + ", this.spawnLock: " + _this.spawnLock);
+                        _this.newPiece();
                     }
                     if (_this.activePiece.gravity === null) {
                         _this.activePiece.gravity = setInterval(function () {
@@ -443,7 +494,7 @@ var Tetris = /** @class */ (function () {
                                 if (!_this.activePiece.moveLock) {
                                     var falling = _this.activePiece.move("gravity");
                                     if (!falling) {
-                                        _this.well.lockPiece(_this.activePiece);
+                                        //this.well.lockPiece(this.activePiece);
                                     }
                                 }
                                 else {
@@ -455,7 +506,6 @@ var Tetris = /** @class */ (function () {
                 }
                 else if (_this.gameOver) {
                     // todo: GAME OVER STATE
-                    //console.log("Game over, man!");
                     _this.drawGameOver();
                 }
                 else if (_this.titleScreen) {
@@ -542,6 +592,12 @@ var Tetris = /** @class */ (function () {
         this.well.resetWell();
         this.log("new game started");
     };
+    Tetris.prototype.newPiece = function () {
+        console.log("Generating new piece...");
+        //this.activePiece.removeLockDelay();
+        this.activePiece = new Tetromino(this.pieceBag.pop(), game, this.well);
+        this.ghostPiece = this.activePiece.getGhost();
+    };
     Tetris.prototype.lineClear = function () {
         this.linesCleared++;
     };
@@ -551,6 +607,7 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.getLevel = function () {
         return this.gameLevel;
     };
+    // DRAW METHODS
     Tetris.prototype.draw = function () {
         // draw BG
         this.context.fillStyle = this.bgColor;
@@ -562,6 +619,9 @@ var Tetris = /** @class */ (function () {
         this.drawPause();
         // draw diagnostics
         this.drawDiag();
+        // test
+        // draw at 500, 700
+        //this.context.strokeRect(700,500, this.blockSize, this.blockSize);
     };
     Tetris.prototype.drawGrid = function () {
         var grid = __spreadArray([], this.well.getGrid());
@@ -583,18 +643,64 @@ var Tetris = /** @class */ (function () {
             for (var col = 0; col < gridWidth; col++) {
                 var blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
                 var blockY = gridY + this.gridSize + (row * (this.blockSize + this.gridSize));
+                var pieceLocking = false;
+                // GRADIENT FILL CODE
+                /*
+                let colorGradient =
+                    this.context.createLinearGradient(700+4, 500+4, 700+this.blockSize-4, 500+this.blockSize-4);
+
+                colorGradient.addColorStop(0,'rgba(255,255,255,0.65)');
+                colorGradient.addColorStop(0.4,'rgba(255,255,255,0.2)');
+                colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
+                this.context.fillStyle = this.colorArray[4];
+
+                this.context.fillRect(700, 500, this.blockSize, this.blockSize);
+                this.context.fillStyle = colorGradient;
+                this.context.fillRect(700+1, 500+1, this.blockSize-2, this.blockSize-2);
+
+                 */
+                // END GRADIENT CODE
                 // render the active piece or that spooky ghost piece
+                //if (piecePos.includes(`${row}:${col}`) || ghostPos.includes(`${row}:${col}`)){
+                var baseColor = void 0;
+                var colorOpacity = 1;
+                var drawGradient = true;
                 if (piecePos.includes(row + ":" + col)) {
-                    this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
+                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
+                    pieceLocking = this.activePiece.getLockPercentage() > 0;
                 }
                 else if (ghostPos.includes(row + ":" + col)) {
-                    this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)]
-                        + this.ghostPieceOpacity.toString(16);
+                    //baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)]
+                    //    + this.ghostPieceOpacity.toString(16);
+                    baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
+                    colorOpacity = this.ghostPieceOpacity / 255;
                 }
                 else {
-                    this.context.fillStyle = this.colorArray[grid[row][col]];
+                    baseColor = this.colorArray[grid[row][col]];
+                    drawGradient = grid[row][col] !== 0;
                 }
+                this.context.globalAlpha = colorOpacity;
+                this.context.fillStyle = baseColor;
                 this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                if (drawGradient) {
+                    var colorGradient = this.context.createLinearGradient(blockX + 4, blockY + 4, blockX + this.blockSize - 4, blockY + this.blockSize - 4);
+                    colorGradient.addColorStop(0, 'rgba(255,255,255,0.65)');
+                    colorGradient.addColorStop(0.4, 'rgba(255,255,255,0.2)');
+                    colorGradient.addColorStop(.65, "rgba(64,64,64,0)");
+                    this.context.fillStyle = colorGradient;
+                    this.context.fillRect(blockX + 1, blockY + 1, this.blockSize - 2, this.blockSize - 2);
+                }
+                this.context.globalAlpha = 1; /*
+            }
+            else {
+                this.context.fillStyle = this.colorArray[grid[row][col]];
+                this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+            }*/
+                // piece lock animation
+                if (pieceLocking) {
+                    this.context.fillStyle = "rgba(255,255,255," + this.activePiece.getLockPercentage() / 100 + ")";
+                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                }
             }
         }
     };
@@ -664,17 +770,31 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.drawOverlay = function () {
         this.context.fillStyle = this.pauseColor;
         this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        /*
-        this.context.fillStyle = this.fontColor;
-
-        this.context.font = "3.0em JetBrains Mono";
-
-        this.context.fillText(message, this.canvas.width/3+64,
-            this.canvas.height/2, this.canvas.width/2);
-
-         */
     };
     Tetris.prototype.lockActivePiece = function () {
+        /*
+        if (withTimer){
+            // handle piece fading to white
+            console.log("lockActivePiece called withTimer");
+        }
+
+        // do I just fire this straight up?
+        clearTimeout(this.lockDelay);
+        this.lockDelay = null;
+
+        console.log(this.getLockDelay());
+        this.lockDelay = setTimeout(() => {
+            clearInterval(this.activePiece.gravity);
+            this.activePiece = null;
+            this.ghostPiece = null;
+            this.holdLock = false;
+            this.lockDelay = null;
+            this.spawnLock = false;
+        // }, withTimer ? 5000 : 0);
+        }, 5000);
+        console.log(this.getLockDelay());
+
+         */
         clearInterval(this.activePiece.gravity);
         this.activePiece = null;
         this.ghostPiece = null;
@@ -684,6 +804,7 @@ var Tetris = /** @class */ (function () {
         if (!this.holdLock) {
             clearInterval(this.activePiece.gravity);
             var tempPiece = this.activePiece;
+            this.activePiece.removeLockDelay();
             this.activePiece = this.heldPiece !== null ?
                 new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
             this.ghostPiece = this.activePiece !== null ?
