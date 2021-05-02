@@ -12,7 +12,7 @@
 class Tetromino {
     static readonly pieceTypes = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
 
-    private static readonly startPositions = {
+    static readonly startPositions = {
         'I': ['0:3','0:4','0:5','0:6'],
         'J': ['0:3','1:3','1:4','1:5'],
         'L': ['0:5','1:3','1:4','1:5'],
@@ -473,6 +473,15 @@ class Tetris {
     private readonly canvas: HTMLCanvasElement;
     private context: CanvasRenderingContext2D;
     private readonly well: Well;
+    private renderedPieces: Object = {
+        "I": HTMLCanvasElement,
+        "J": HTMLCanvasElement,
+        "L": HTMLCanvasElement,
+        "O": HTMLCanvasElement,
+        "S": HTMLCanvasElement,
+        "T": HTMLCanvasElement,
+        "Z": HTMLCanvasElement
+    }
 
     // game settings
     private readonly blockSize = 24;
@@ -485,7 +494,8 @@ class Tetris {
         0.1312, 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
     ];
     private readonly ghostPieceOpacity = 48;    // 0-255
-    private readonly gridSize = 3;
+    // private readonly gridSize = 3;
+    private readonly gridSize = 1;
     readonly updateFrequency = 1000 / this.frameRate;
 
     private readonly controls = [
@@ -493,7 +503,7 @@ class Tetris {
         "e", "n", "Enter"
     ];
 
-    // timers from NodeJS.Timeoust 
+    // timers from NodeJS.Timeout
     
     // game state
     private activePiece: Tetromino = null;
@@ -504,11 +514,14 @@ class Tetris {
     private gameLevel: number;
     private ghostPiece: Tetromino = null;
     private heldPiece: Tetromino = null;
+    private highScore: number = 32000;
     private holdLock: boolean = false;
     private linesCleared: number;
     private lockDelay: ReturnType<typeof setTimeout> = null;
     private paused: boolean;
     private pieceBag: string[] = [];
+    private pieceBagBackup: string[] = [];
+    private upcomingPieces: string[];
     private previousLoopTime: number;
     private running: boolean;
     private score: number;
@@ -528,12 +541,19 @@ class Tetris {
         First is a reference to the bgColor so it's at index 0
         lt blue, darkblue, orange, yellow, green, purple, red
      */
-    private readonly bgColor    = '#1b1d24';
-    private readonly pauseColor = '#1b1d24aa';
-    private readonly fontColor  = '#68e4b6';
-    private readonly gridColor  = '#282c34';
-    private readonly colorArray = [
-        this.bgColor, '#3498db', '#273ac5', '#e97e03',
+    private readonly bgColor        = '#1b1d24';
+    private readonly bgColor1       = '#3498db';    // TODO: these need better names
+    private readonly bgColor2       = '#68e4b6'     //  <-
+    private readonly borderColor    = '#bbb';
+    private readonly pauseColor     = '#1b1d24aa'   // todo: use pauseOpacity for alpha
+    private pauseFinalOpacity       = 85; // out of 255
+    private pauseOpacity            = 0;
+    private pauseOpacityTimer: ReturnType<typeof setInterval> = null;
+    private readonly fontColor      = '#68e4b6';
+    // private readonly gridColor  = '#282c34';
+    private readonly gridColor      = '#9b9ba9';
+    private readonly colorArray     = [
+        '#1b1d24', '#3498db', '#273ac5', '#e97e03',
         '#edcc30', '#13be3d', '#b84cd8', '#ec334d'];
 
     constructor() {
@@ -541,7 +561,30 @@ class Tetris {
         this.context    = this.canvas.getContext('2d');
         this.well       = new Well(this);
 
-        // todo: don't autostart eventually
+        for (let pieceType of Tetromino.pieceTypes){
+            this.renderedPieces[pieceType] = document.createElement("canvas");
+
+            if (pieceType === "I"){
+                this.renderedPieces[pieceType].width = (4 * (this.blockSize+this.gridSize));
+                this.renderedPieces[pieceType].height = this.blockSize + this.gridSize;
+            }
+            else if (pieceType === "O"){
+                this.renderedPieces[pieceType].width = (4 * (this.blockSize+this.gridSize));
+                this.renderedPieces[pieceType].height = (2 * (this.blockSize+this.gridSize));
+            }
+            else {
+                this.renderedPieces[pieceType].width = (3 * (this.blockSize+this.gridSize));
+                this.renderedPieces[pieceType].height = (2 * (this.blockSize+this.gridSize));
+            }
+
+
+
+            Tetris.renderCosmeticPiece(pieceType, this.renderedPieces[pieceType],
+                this.blockSize, this.gridSize, this.colorArray[Tetromino.pieceTypes.indexOf(pieceType)+1]);
+        }
+
+        // get high score from wherever it has been saved?
+
         this.start();
     }
 
@@ -578,8 +621,13 @@ class Tetris {
 
                     // check if piece bag is exhausted
                     // todo: store two piece bags so you can have a long prediction of pieces?
+                    if (this.pieceBagBackup.length <= 0){
+                        this.pieceBagBackup = Tetris.newPieceBag();
+                    }
+
                     if (this.pieceBag.length <= 0) {
-                        this.newPieceBag();
+                        this.pieceBag = this.pieceBagBackup;
+                        this.pieceBagBackup = [];
                     }
 
                     // clear lines that need to be cleared
@@ -707,14 +755,48 @@ class Tetris {
         //this.activePiece.removeLockDelay();
         this.activePiece = new Tetromino(this.pieceBag.pop(), game, this.well);
         this.ghostPiece  = this.activePiece.getGhost();
+
+        let pieceBagContents = [...this.pieceBag].reverse();
+        let pieceBagBackupContents = [...this.pieceBagBackup].reverse();
+        this.upcomingPieces = pieceBagContents.concat(pieceBagBackupContents).slice(0,5);
     }
 
     lineClear(): void {
         this.linesCleared++;
     }
 
+    lockActivePiece() {
+        clearInterval(this.activePiece.gravity);
+        this.activePiece = null;
+        this.ghostPiece = null;
+        this.holdLock = false;
+    }
+
+    holdPiece() {
+        if (!this.holdLock) {
+            clearInterval(this.activePiece.gravity);
+
+            let tempPiece = this.activePiece;
+
+            this.activePiece.removeLockDelay();
+
+            this.activePiece = this.heldPiece !== null ?
+                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
+            this.ghostPiece = this.activePiece !== null ?
+                this.activePiece.getGhost() : null;
+
+            this.heldPiece = tempPiece;
+            this.holdLock = true;
+        }
+    }
+
+    setSpawnLock(state: boolean){
+        this.spawnLock = state;
+    }
+
     addScore(score: number): void{
         this.score += score;
+        this.highScore = this.score > this.highScore ? this.score : this.highScore;
     }
 
     getLevel(): number{
@@ -724,24 +806,62 @@ class Tetris {
     // DRAW METHODS
 
     private draw(): void {
+        // dynamic numbers used for ambient animations
+        let sinOffset = 500*Math.sin(Date.now()/50000);
+        let cosOffset = 500*Math.cos(Date.now()/50000);
+
         // draw BG
-        this.context.fillStyle = this.bgColor;
-        this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+        this.drawBackground(sinOffset, cosOffset);
 
         // draw Grid
         if (!this.gameOver) {
             this.drawGrid();
         }
 
+        // draw UI
+        this.drawUI(sinOffset, cosOffset);
+
+        // finally, draw pause overlay if necessary
         this.drawPause();
+    }
 
-        // draw diagnostics
-        this.drawDiag();
+    private drawBackground(sinOffset: number, cosOffset: number) {
 
-        // test
+        // I don't usually like getting this gross with my variable names but this was becoming nuts
+        let w = this.canvas.width;
+        let h = this.canvas.height;
 
-        // draw at 500, 700
-        //this.context.strokeRect(700,500, this.blockSize, this.blockSize);
+        // draw base color
+        this.context.fillStyle = this.bgColor;
+        this.context.fillRect(0,0, w, h);
+
+        // draw bg gradient
+        let bgGradient = this.context.createLinearGradient(w+200 - w/8 + sinOffset/10,0,
+            200 + w/8 + cosOffset/10,h);
+        //bgGradient.addColorStop(1, '#111112');
+        bgGradient.addColorStop(1, '#0a0a37');
+        bgGradient.addColorStop(0, '#0f4ba7');
+        this.context.fillStyle = bgGradient;
+        this.context.fillRect(0, 0, w, h);
+
+        // create bezier gradient
+        let bezierGradient = this.context.createLinearGradient(0,0, w, h);
+        bezierGradient.addColorStop(0,this.bgColor1);
+        bezierGradient.addColorStop(1,this.bgColor2);
+        this.context.strokeStyle = bezierGradient;
+        this.context.globalCompositeOperation = "overlay";
+
+        // create bezier curves
+        for (let x = 0; x < 60; x++){
+            this.context.beginPath();
+            this.context.moveTo(-300 + cosOffset/30, w/3 + sinOffset);
+            this.context.bezierCurveTo(w/4 - (x*10), h/3,
+                h * 2/3 + (x*40), (x*40)+(cosOffset/500),
+                w+50, h/2 + cosOffset);
+            this.context.stroke();
+        }
+
+        this.context.globalCompositeOperation = "source-over";
     }
 
     private drawGrid(){
@@ -756,9 +876,15 @@ class Tetris {
         let gridY = this.canvas.height/2 - gridPixHeight/2;
 
         this.context.fillStyle = this.gridColor;
+        this.context.globalCompositeOperation = "multiply";
+        this.context.filter = 'blur(2px)';
+
 
         // draw grid bg
         this.context.fillRect(gridX, gridY, gridPixWidth, gridPixHeight);
+
+        this.context.globalCompositeOperation = "source-over";
+        this.context.filter = 'none';
 
         // get positions of active piece and that freaky ghost piece
         let piecePos = this.activePiece === null ? null : this.activePiece.getPos();
@@ -772,67 +898,53 @@ class Tetris {
 
                 let pieceLocking = false;
 
-                // GRADIENT FILL CODE
-                /*
-                let colorGradient =
-                    this.context.createLinearGradient(700+4, 500+4, 700+this.blockSize-4, 500+this.blockSize-4);
+                // piece rendering - should this be another draw method?
+                let baseColor: string;
+                let colorOpacity = 1;
+                let drawGradient = true;
 
-                colorGradient.addColorStop(0,'rgba(255,255,255,0.65)');
-                colorGradient.addColorStop(0.4,'rgba(255,255,255,0.2)');
-                colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
-                this.context.fillStyle = this.colorArray[4];
-
-                this.context.fillRect(700, 500, this.blockSize, this.blockSize);
-                this.context.fillStyle = colorGradient;
-                this.context.fillRect(700+1, 500+1, this.blockSize-2, this.blockSize-2);
-
-                 */
-                // END GRADIENT CODE
-
-
-                // render the active piece or that spooky ghost piece
-                //if (piecePos.includes(`${row}:${col}`) || ghostPos.includes(`${row}:${col}`)){
-                    let baseColor: string;
-                    let colorOpacity = 1;
-                    let drawGradient = true;
-
-                    if (piecePos.includes(`${row}:${col}`)){
-                        baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
-                        pieceLocking = this.activePiece.getLockPercentage() > 0;
-                    }
-                    else if (ghostPos.includes(`${row}:${col}`)){
-                        //baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)]
-                        //    + this.ghostPieceOpacity.toString(16);
-                        baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
-                        colorOpacity = this.ghostPieceOpacity / 255;
-                    } else {
-                        baseColor = this.colorArray[grid[row][col]];
-                        drawGradient = grid[row][col] !== 0;
-                    }
-
-                    this.context.globalAlpha = colorOpacity;
-                    this.context.fillStyle = baseColor;
-
-                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-
-                    if (drawGradient) {
-                        let colorGradient =
-                            this.context.createLinearGradient(blockX+4, blockY+4,
-                                blockX+this.blockSize-4, blockY+this.blockSize-4);
-
-                        colorGradient.addColorStop(0,'rgba(255,255,255,0.65)');
-                        colorGradient.addColorStop(0.4,'rgba(255,255,255,0.2)');
-                        colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
-
-                        this.context.fillStyle = colorGradient;
-                        this.context.fillRect(blockX + 1, blockY + 1, this.blockSize - 2, this.blockSize - 2);
-                    }
-                    this.context.globalAlpha = 1;/*
+                if (piecePos.includes(`${row}:${col}`)){        // color from piece
+                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
+                    pieceLocking = this.activePiece.getLockPercentage() > 0;
                 }
-                else {
-                    this.context.fillStyle = this.colorArray[grid[row][col]];
+                else if (ghostPos.includes(`${row}:${col}`)){   // color from ghost piece
+                    // first draw empty cell for proper transparency
+                    this.context.fillStyle = this.colorArray[0];
                     this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-                }*/
+
+                    //
+                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
+                    colorOpacity = this.ghostPieceOpacity / 255;
+                } else {                                        // color from grid
+                    baseColor = this.colorArray[grid[row][col]];
+                    drawGradient = grid[row][col] !== 0;
+
+                    if (grid[row][col] === 0){
+                        colorOpacity = .8;
+                    }
+                }
+
+                this.context.globalAlpha = colorOpacity;
+                this.context.fillStyle = baseColor;
+                this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+
+                if (drawGradient) {
+                    let colorGradient =
+                        this.context.createLinearGradient(blockX+4, blockY+4,
+                            blockX+this.blockSize-4, blockY+this.blockSize-4);
+
+
+                    // this is the same in renderCosmeticPiece() and I don't like it, but I don't
+                    // know how I'd make it universal
+                    colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
+                    colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
+                    colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
+
+                    this.context.fillStyle = colorGradient;
+                    this.context.fillRect(blockX + 1, blockY + 1, this.blockSize - 2, this.blockSize - 2);
+                }
+
+                this.context.globalAlpha = 1;
 
                 // piece lock animation
                 if (pieceLocking){
@@ -841,61 +953,119 @@ class Tetris {
                 }
             }
         }
+
+        this.context.globalAlpha = .8;
+        this.context.strokeStyle = this.borderColor;
+        this.context.strokeRect(gridX, gridY, gridPixWidth, gridPixHeight);
+
+        this.context.globalAlpha = 1;
     }
 
-    // I should probably make this not only on debug and rename it to "drawUI" or something
-    private drawDiag() {
-        if (this.DEBUG) {
-            if (!this.gameOver) {
-                // maybe make this universal?
-                this.context.fillStyle = '#bbb';
-                this.context.font = '1.0em "JetBrains Mono"';
+    private drawUI(sinOffset: number, cosOffset: number) {
+        if (!this.gameOver) {
+            // maybe make this universal?
+            this.context.fillStyle = '#bbb';
+            this.context.font = '1.0em "JetBrains Mono"';
 
-                // left side
+            // left side
+            
+            // held piece
+            this.context.fillText(
+                `heldPiece: ${this.heldPiece !== null ? this.heldPiece.pieceType : null}`,
+                20, 20, 200);
 
-                // next piece
-                this.context.fillText(
-                    `nextPiece: ${this.pieceBag !== null ? this.pieceBag[this.pieceBag.length - 1] : null}`,
-                    20, 20, 200);
-                // held piece
-                this.context.fillText(
-                    `heldPiece: ${this.heldPiece !== null ? this.heldPiece.pieceType : null}`,
-                    20, 60, 200);
+            // level
+            this.context.fillText(`gameLevel: ${this.gameLevel}`, 20, 60, 200);
+
+            // lines cleared
+            this.context.fillText(`linesCleared: ${this.linesCleared}`, 20, 100, 200);
+
+            // score
+            this.context.fillText(`score: ${this.score}`, 20, 140, 200);
+
+            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
+            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
+
+            // gametime
+            this.context.fillText(`gameTime: ${mins}:${secs}`, 20, 180, 200);
 
 
-                //right side
+            //right side
+            this.context.fillStyle = this.gridColor;
+            this.context.filter = 'blur(5px)';
+            this.context.globalCompositeOperation = 'multiply';
 
-                // level
-                this.context.fillText(`gameLevel: ${this.gameLevel}`, 580, 20, 200);
+            let boxWidth    = this.canvas.width/6;
+            let boxHeight   = ((this.blockSize+this.gridSize) * this.well.getGrid().length) + this.gridSize;
+            let boxX        = this.canvas.width - 1.5 * (this.canvas.width / 4 - (boxWidth/2));
+            let boxY        = (this.canvas.height / 2 - (boxHeight/2));
 
-                // lines cleared
-                this.context.fillText(`linesCleared: ${this.linesCleared}`, 580, 60, 200);
+            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
 
-                // score
-                this.context.fillText(`score: ${this.score}`, 580, 100, 200);
+            this.context.fillStyle = this.bgColor;
+            this.context.filter = 'none';
+            this.context.globalAlpha = .8;
+            this.context.globalCompositeOperation = 'source-over';
 
-                let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
-                let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
+            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
 
-                // gametime
-                this.context.fillText(`gameTime: ${mins}:${secs}`, 580, 140, 200);
+            this.context.strokeStyle = this.borderColor;
+            this.context.strokeRect(boxX, boxY, boxWidth, boxHeight);
 
-                // draw that diag message
-                this.context.fillStyle = this.fontColor;
-                this.context.font = "0.8em JetBrains Mono";
+            this.context.globalAlpha = 1;
 
-                for (let i = 0; i < this.diagMessage.length; i++) {
-                    this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
-                    this.context.fillText(`${this.diagMessage[i]}`,
-                        20, (i * 20) + 100, 200);
-                }
+            this.context.fillStyle = this.borderColor;
+            this.context.font = 'bold 1.4em "JetBrains Mono"';
+            this.context.fillText("Next:", boxX + (boxWidth/2 - 32),
+                boxY + (boxHeight / 12), 64);
+
+            let upcomingPieceY = (boxHeight / 6) + (boxHeight / 12);
+            for (let piece of this.upcomingPieces) {
+                let upcomingPieceCanvas = this.renderedPieces[piece];
+                let upcomingPieceX = boxX + (boxWidth/2 - upcomingPieceCanvas.width/2);
+                let upcomingPieceWidth = upcomingPieceCanvas.width;
+                let upcomingPieceHeight = upcomingPieceCanvas.height;
+                // this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY,
+                //     upcomingPieceWidth * (1 + (Math.sin(Date.now())/5)),
+                //     upcomingPieceHeight * (1 + (Math.sin(Date.now)/5)));
+
+                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
+                upcomingPieceY += boxHeight / 6;
             }
-            else if (this.titleScreen) {
-                this.drawTitle();
+
+            /*
+            // level
+            this.context.fillText(`gameLevel: ${this.gameLevel}`, 580, 20, 200);
+
+            // lines cleared
+            this.context.fillText(`linesCleared: ${this.linesCleared}`, 580, 60, 200);
+
+            // score
+            this.context.fillText(`score: ${this.score}`, 580, 100, 200);
+
+            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
+            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
+
+            // gametime
+            this.context.fillText(`gameTime: ${mins}:${secs}`, 580, 140, 200);
+
+            // draw that diag message
+            this.context.fillStyle = this.fontColor;
+            this.context.font = "0.8em JetBrains Mono";
+
+            for (let i = 0; i < this.diagMessage.length; i++) {
+                this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
+                this.context.fillText(`${this.diagMessage[i]}`,
+                    20, (i * 20) + 100, 200);
             }
-            else {
-                this.drawGameOver();
-            }
+
+             */
+        }
+        else if (this.titleScreen) {
+            this.drawTitle();
+        }
+        else {
+            this.drawGameOver();
         }
     }
 
@@ -938,61 +1108,51 @@ class Tetris {
     }
 
     // I think I could make this better, I'm not satisfied as it is
+    // todo: implement fade in with this.pauseOpacity and this.pauseOpacityTimer
     private drawOverlay(){
         this.context.fillStyle = this.pauseColor;
         this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
     }
 
-    lockActivePiece() {
-        /*
-        if (withTimer){
-            // handle piece fading to white
-            console.log("lockActivePiece called withTimer");
+    // used to render a piece for display only (next piece queue, held piece)
+    private static renderCosmeticPiece(pieceType: string, canvas: HTMLCanvasElement,
+                                blockSize: number, gridSize: number, color: string):void {
+        if (!Tetromino.pieceTypes.includes(pieceType)){
+            throw new Error("renderCosmeticPiece was not given a valid piece type!");
         }
 
-        // do I just fire this straight up?
-        clearTimeout(this.lockDelay);
-        this.lockDelay = null;
+        let context = canvas.getContext('2d');
 
-        console.log(this.getLockDelay());
-        this.lockDelay = setTimeout(() => {
-            clearInterval(this.activePiece.gravity);
-            this.activePiece = null;
-            this.ghostPiece = null;
-            this.holdLock = false;
-            this.lockDelay = null;
-            this.spawnLock = false;
-        // }, withTimer ? 5000 : 0);
-        }, 5000);
-        console.log(this.getLockDelay());
+        for (let i = 0; i < 4; i++){
+            let blockCoords = (Tetromino.startPositions[pieceType] as string[])[i].split(":")
+                .map(x => parseInt(x));
 
-         */
-        clearInterval(this.activePiece.gravity);
-        this.activePiece = null;
-        this.ghostPiece = null;
-        this.holdLock = false;
-    }
+            let xPos = gridSize + ((blockCoords[1] - 3) * (blockSize + gridSize));
+            let yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
 
-    holdPiece() {
-        if (!this.holdLock) {
-            clearInterval(this.activePiece.gravity);
+            context.fillStyle = color;
+            context.fillRect(xPos, yPos, blockSize, blockSize);
 
-            let tempPiece = this.activePiece;
+            // let colorGradient = context.createLinearGradient(xPos + 4, xPos + 4,
+            //         xPos + blockSize - 4, yPos + blockSize - 4);
 
-            this.activePiece.removeLockDelay();
+            //TODO: Figure out the buggy gradient positioning
 
-            this.activePiece = this.heldPiece !== null ?
-                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
-            this.ghostPiece = this.activePiece !== null ?
-                this.activePiece.getGhost() : null;
+            let colorGradient = context.createLinearGradient(xPos + 4, xPos + 4,
+                xPos + blockSize - 4, yPos + blockSize - 4);
 
-            this.heldPiece = tempPiece;
-            this.holdLock = true;
+
+
+
+            // this is the same in renderCosmeticPiece() and I don't like it, but I don't
+            // know how I'd make it universal
+            colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
+            colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
+            colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
+
+            context.fillStyle = colorGradient;
+            context.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
         }
-    }
-
-    setSpawnLock(state: boolean){
-        this.spawnLock = state;
     }
 
     log(message: string){
@@ -1011,18 +1171,20 @@ class Tetris {
         return Tetromino.pieceTypes.indexOf(piece.pieceType) + 1;
     }
 
-    private newPieceBag(){
-        this.pieceBag = [...Tetromino.pieceTypes];
+    private static newPieceBag(): string[]{
+        let pieceBag = [...Tetromino.pieceTypes];
 
         for (let i = 0; i < 7; i++){
             let randIndex = Math.floor(Math.random() * (7-i));
 
             if (randIndex != i) {
-                let temp = this.pieceBag[i];
-                this.pieceBag[i] = this.pieceBag[randIndex];
-                this.pieceBag[randIndex] = temp;
+                let temp = pieceBag[i];
+                pieceBag[i] = pieceBag[randIndex];
+                pieceBag[randIndex] = temp;
             }
         }
+
+        return pieceBag;
     }
 }
 

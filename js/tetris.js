@@ -400,6 +400,15 @@ var Well = /** @class */ (function () {
  */
 var Tetris = /** @class */ (function () {
     function Tetris() {
+        this.renderedPieces = {
+            "I": HTMLCanvasElement,
+            "J": HTMLCanvasElement,
+            "L": HTMLCanvasElement,
+            "O": HTMLCanvasElement,
+            "S": HTMLCanvasElement,
+            "T": HTMLCanvasElement,
+            "Z": HTMLCanvasElement
+        };
         // game settings
         this.blockSize = 24;
         this.DEBUG = true;
@@ -411,21 +420,24 @@ var Tetris = /** @class */ (function () {
             0.1312, 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
         ];
         this.ghostPieceOpacity = 48; // 0-255
-        this.gridSize = 3;
+        // private readonly gridSize = 3;
+        this.gridSize = 1;
         this.updateFrequency = 1000 / this.frameRate;
         this.controls = [
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
-        // timers from NodeJS.Timeoust 
+        // timers from NodeJS.Timeout
         // game state
         this.activePiece = null;
         this.gameOver = true;
         this.ghostPiece = null;
         this.heldPiece = null;
+        this.highScore = 32000;
         this.holdLock = false;
         this.lockDelay = null;
         this.pieceBag = [];
+        this.pieceBagBackup = [];
         this.titleScreen = true;
         this.logLength = 24;
         // graphics stuff
@@ -436,17 +448,41 @@ var Tetris = /** @class */ (function () {
             lt blue, darkblue, orange, yellow, green, purple, red
          */
         this.bgColor = '#1b1d24';
-        this.pauseColor = '#1b1d24aa';
+        this.bgColor1 = '#3498db'; // TODO: these need better names
+        this.bgColor2 = '#68e4b6'; //  <-
+        this.borderColor = '#bbb';
+        this.pauseColor = '#1b1d24aa'; // todo: use pauseOpacity for alpha
+        this.pauseFinalOpacity = 85; // out of 255
+        this.pauseOpacity = 0;
+        this.pauseOpacityTimer = null;
         this.fontColor = '#68e4b6';
-        this.gridColor = '#282c34';
+        // private readonly gridColor  = '#282c34';
+        this.gridColor = '#9b9ba9';
         this.colorArray = [
-            this.bgColor, '#3498db', '#273ac5', '#e97e03',
+            '#1b1d24', '#3498db', '#273ac5', '#e97e03',
             '#edcc30', '#13be3d', '#b84cd8', '#ec334d'
         ];
         this.canvas = document.getElementById("main-canvas");
         this.context = this.canvas.getContext('2d');
         this.well = new Well(this);
-        // todo: don't autostart eventually
+        for (var _i = 0, _a = Tetromino.pieceTypes; _i < _a.length; _i++) {
+            var pieceType = _a[_i];
+            this.renderedPieces[pieceType] = document.createElement("canvas");
+            if (pieceType === "I") {
+                this.renderedPieces[pieceType].width = (4 * (this.blockSize + this.gridSize));
+                this.renderedPieces[pieceType].height = this.blockSize + this.gridSize;
+            }
+            else if (pieceType === "O") {
+                this.renderedPieces[pieceType].width = (4 * (this.blockSize + this.gridSize));
+                this.renderedPieces[pieceType].height = (2 * (this.blockSize + this.gridSize));
+            }
+            else {
+                this.renderedPieces[pieceType].width = (3 * (this.blockSize + this.gridSize));
+                this.renderedPieces[pieceType].height = (2 * (this.blockSize + this.gridSize));
+            }
+            Tetris.renderCosmeticPiece(pieceType, this.renderedPieces[pieceType], this.blockSize, this.gridSize, this.colorArray[Tetromino.pieceTypes.indexOf(pieceType) + 1]);
+        }
+        // get high score from wherever it has been saved?
         this.start();
     }
     Tetris.prototype.start = function () {
@@ -476,8 +512,12 @@ var Tetris = /** @class */ (function () {
                     }
                     // check if piece bag is exhausted
                     // todo: store two piece bags so you can have a long prediction of pieces?
+                    if (_this.pieceBagBackup.length <= 0) {
+                        _this.pieceBagBackup = Tetris.newPieceBag();
+                    }
                     if (_this.pieceBag.length <= 0) {
-                        _this.newPieceBag();
+                        _this.pieceBag = _this.pieceBagBackup;
+                        _this.pieceBagBackup = [];
                     }
                     // clear lines that need to be cleared
                     if (_this.activePiece == null) {
@@ -597,31 +637,86 @@ var Tetris = /** @class */ (function () {
         //this.activePiece.removeLockDelay();
         this.activePiece = new Tetromino(this.pieceBag.pop(), game, this.well);
         this.ghostPiece = this.activePiece.getGhost();
+        var pieceBagContents = __spreadArray([], this.pieceBag).reverse();
+        var pieceBagBackupContents = __spreadArray([], this.pieceBagBackup).reverse();
+        this.upcomingPieces = pieceBagContents.concat(pieceBagBackupContents).slice(0, 5);
     };
     Tetris.prototype.lineClear = function () {
         this.linesCleared++;
     };
+    Tetris.prototype.lockActivePiece = function () {
+        clearInterval(this.activePiece.gravity);
+        this.activePiece = null;
+        this.ghostPiece = null;
+        this.holdLock = false;
+    };
+    Tetris.prototype.holdPiece = function () {
+        if (!this.holdLock) {
+            clearInterval(this.activePiece.gravity);
+            var tempPiece = this.activePiece;
+            this.activePiece.removeLockDelay();
+            this.activePiece = this.heldPiece !== null ?
+                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
+            this.ghostPiece = this.activePiece !== null ?
+                this.activePiece.getGhost() : null;
+            this.heldPiece = tempPiece;
+            this.holdLock = true;
+        }
+    };
+    Tetris.prototype.setSpawnLock = function (state) {
+        this.spawnLock = state;
+    };
     Tetris.prototype.addScore = function (score) {
         this.score += score;
+        this.highScore = this.score > this.highScore ? this.score : this.highScore;
     };
     Tetris.prototype.getLevel = function () {
         return this.gameLevel;
     };
     // DRAW METHODS
     Tetris.prototype.draw = function () {
+        // dynamic numbers used for ambient animations
+        var sinOffset = 500 * Math.sin(Date.now() / 50000);
+        var cosOffset = 500 * Math.cos(Date.now() / 50000);
         // draw BG
-        this.context.fillStyle = this.bgColor;
-        this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawBackground(sinOffset, cosOffset);
         // draw Grid
         if (!this.gameOver) {
             this.drawGrid();
         }
+        // draw UI
+        this.drawUI(sinOffset, cosOffset);
+        // finally, draw pause overlay if necessary
         this.drawPause();
-        // draw diagnostics
-        this.drawDiag();
-        // test
-        // draw at 500, 700
-        //this.context.strokeRect(700,500, this.blockSize, this.blockSize);
+    };
+    Tetris.prototype.drawBackground = function (sinOffset, cosOffset) {
+        // I don't usually like getting this gross with my variable names but this was becoming nuts
+        var w = this.canvas.width;
+        var h = this.canvas.height;
+        // draw base color
+        this.context.fillStyle = this.bgColor;
+        this.context.fillRect(0, 0, w, h);
+        // draw bg gradient
+        var bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0, 200 + w / 8 + cosOffset / 10, h);
+        //bgGradient.addColorStop(1, '#111112');
+        bgGradient.addColorStop(1, '#0a0a37');
+        bgGradient.addColorStop(0, '#0f4ba7');
+        this.context.fillStyle = bgGradient;
+        this.context.fillRect(0, 0, w, h);
+        // create bezier gradient
+        var bezierGradient = this.context.createLinearGradient(0, 0, w, h);
+        bezierGradient.addColorStop(0, this.bgColor1);
+        bezierGradient.addColorStop(1, this.bgColor2);
+        this.context.strokeStyle = bezierGradient;
+        this.context.globalCompositeOperation = "overlay";
+        // create bezier curves
+        for (var x = 0; x < 60; x++) {
+            this.context.beginPath();
+            this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
+            this.context.bezierCurveTo(w / 4 - (x * 10), h / 3, h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500), w + 50, h / 2 + cosOffset);
+            this.context.stroke();
+        }
+        this.context.globalCompositeOperation = "source-over";
     };
     Tetris.prototype.drawGrid = function () {
         var grid = __spreadArray([], this.well.getGrid());
@@ -633,8 +728,12 @@ var Tetris = /** @class */ (function () {
         var gridX = this.canvas.width / 2 - gridPixWidth / 2;
         var gridY = this.canvas.height / 2 - gridPixHeight / 2;
         this.context.fillStyle = this.gridColor;
+        this.context.globalCompositeOperation = "multiply";
+        this.context.filter = 'blur(2px)';
         // draw grid bg
         this.context.fillRect(gridX, gridY, gridPixWidth, gridPixHeight);
+        this.context.globalCompositeOperation = "source-over";
+        this.context.filter = 'none';
         // get positions of active piece and that freaky ghost piece
         var piecePos = this.activePiece === null ? null : this.activePiece.getPos();
         var ghostPos = this.ghostPiece === null ? null : this.ghostPiece.getPos();
@@ -644,58 +743,43 @@ var Tetris = /** @class */ (function () {
                 var blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
                 var blockY = gridY + this.gridSize + (row * (this.blockSize + this.gridSize));
                 var pieceLocking = false;
-                // GRADIENT FILL CODE
-                /*
-                let colorGradient =
-                    this.context.createLinearGradient(700+4, 500+4, 700+this.blockSize-4, 500+this.blockSize-4);
-
-                colorGradient.addColorStop(0,'rgba(255,255,255,0.65)');
-                colorGradient.addColorStop(0.4,'rgba(255,255,255,0.2)');
-                colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
-                this.context.fillStyle = this.colorArray[4];
-
-                this.context.fillRect(700, 500, this.blockSize, this.blockSize);
-                this.context.fillStyle = colorGradient;
-                this.context.fillRect(700+1, 500+1, this.blockSize-2, this.blockSize-2);
-
-                 */
-                // END GRADIENT CODE
-                // render the active piece or that spooky ghost piece
-                //if (piecePos.includes(`${row}:${col}`) || ghostPos.includes(`${row}:${col}`)){
+                // piece rendering - should this be another draw method?
                 var baseColor = void 0;
                 var colorOpacity = 1;
                 var drawGradient = true;
-                if (piecePos.includes(row + ":" + col)) {
+                if (piecePos.includes(row + ":" + col)) { // color from piece
                     baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
                     pieceLocking = this.activePiece.getLockPercentage() > 0;
                 }
-                else if (ghostPos.includes(row + ":" + col)) {
-                    //baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)]
-                    //    + this.ghostPieceOpacity.toString(16);
-                    baseColor = this.context.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
+                else if (ghostPos.includes(row + ":" + col)) { // color from ghost piece
+                    // first draw empty cell for proper transparency
+                    this.context.fillStyle = this.colorArray[0];
+                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                    //
+                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
                     colorOpacity = this.ghostPieceOpacity / 255;
                 }
-                else {
+                else { // color from grid
                     baseColor = this.colorArray[grid[row][col]];
                     drawGradient = grid[row][col] !== 0;
+                    if (grid[row][col] === 0) {
+                        colorOpacity = .8;
+                    }
                 }
                 this.context.globalAlpha = colorOpacity;
                 this.context.fillStyle = baseColor;
                 this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 if (drawGradient) {
                     var colorGradient = this.context.createLinearGradient(blockX + 4, blockY + 4, blockX + this.blockSize - 4, blockY + this.blockSize - 4);
-                    colorGradient.addColorStop(0, 'rgba(255,255,255,0.65)');
-                    colorGradient.addColorStop(0.4, 'rgba(255,255,255,0.2)');
+                    // this is the same in renderCosmeticPiece() and I don't like it, but I don't
+                    // know how I'd make it universal
+                    colorGradient.addColorStop(0, 'rgba(255,255,255,0.45)');
+                    colorGradient.addColorStop(0.4, 'rgba(255,255,255,0.15)');
                     colorGradient.addColorStop(.65, "rgba(64,64,64,0)");
                     this.context.fillStyle = colorGradient;
                     this.context.fillRect(blockX + 1, blockY + 1, this.blockSize - 2, this.blockSize - 2);
                 }
-                this.context.globalAlpha = 1; /*
-            }
-            else {
-                this.context.fillStyle = this.colorArray[grid[row][col]];
-                this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-            }*/
+                this.context.globalAlpha = 1;
                 // piece lock animation
                 if (pieceLocking) {
                     this.context.fillStyle = "rgba(255,255,255," + this.activePiece.getLockPercentage() / 100 + ")";
@@ -703,44 +787,95 @@ var Tetris = /** @class */ (function () {
                 }
             }
         }
+        this.context.globalAlpha = .8;
+        this.context.strokeStyle = this.borderColor;
+        this.context.strokeRect(gridX, gridY, gridPixWidth, gridPixHeight);
+        this.context.globalAlpha = 1;
     };
-    // I should probably make this not only on debug and rename it to "drawUI" or something
-    Tetris.prototype.drawDiag = function () {
-        if (this.DEBUG) {
-            if (!this.gameOver) {
-                // maybe make this universal?
-                this.context.fillStyle = '#bbb';
-                this.context.font = '1.0em "JetBrains Mono"';
-                // left side
-                // next piece
-                this.context.fillText("nextPiece: " + (this.pieceBag !== null ? this.pieceBag[this.pieceBag.length - 1] : null), 20, 20, 200);
-                // held piece
-                this.context.fillText("heldPiece: " + (this.heldPiece !== null ? this.heldPiece.pieceType : null), 20, 60, 200);
-                //right side
-                // level
-                this.context.fillText("gameLevel: " + this.gameLevel, 580, 20, 200);
-                // lines cleared
-                this.context.fillText("linesCleared: " + this.linesCleared, 580, 60, 200);
-                // score
-                this.context.fillText("score: " + this.score, 580, 100, 200);
-                var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
-                var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
-                // gametime
-                this.context.fillText("gameTime: " + mins + ":" + secs, 580, 140, 200);
-                // draw that diag message
-                this.context.fillStyle = this.fontColor;
-                this.context.font = "0.8em JetBrains Mono";
-                for (var i = 0; i < this.diagMessage.length; i++) {
-                    this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
-                    this.context.fillText("" + this.diagMessage[i], 20, (i * 20) + 100, 200);
-                }
+    Tetris.prototype.drawUI = function (sinOffset, cosOffset) {
+        if (!this.gameOver) {
+            // maybe make this universal?
+            this.context.fillStyle = '#bbb';
+            this.context.font = '1.0em "JetBrains Mono"';
+            // left side
+            // held piece
+            this.context.fillText("heldPiece: " + (this.heldPiece !== null ? this.heldPiece.pieceType : null), 20, 20, 200);
+            // level
+            this.context.fillText("gameLevel: " + this.gameLevel, 20, 60, 200);
+            // lines cleared
+            this.context.fillText("linesCleared: " + this.linesCleared, 20, 100, 200);
+            // score
+            this.context.fillText("score: " + this.score, 20, 140, 200);
+            var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
+            var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
+            // gametime
+            this.context.fillText("gameTime: " + mins + ":" + secs, 20, 180, 200);
+            //right side
+            this.context.fillStyle = this.gridColor;
+            this.context.filter = 'blur(5px)';
+            this.context.globalCompositeOperation = 'multiply';
+            var boxWidth = this.canvas.width / 6;
+            var boxHeight = ((this.blockSize + this.gridSize) * this.well.getGrid().length) + this.gridSize;
+            var boxX = this.canvas.width - 1.5 * (this.canvas.width / 4 - (boxWidth / 2));
+            var boxY = (this.canvas.height / 2 - (boxHeight / 2));
+            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.fillStyle = this.bgColor;
+            this.context.filter = 'none';
+            this.context.globalAlpha = .8;
+            this.context.globalCompositeOperation = 'source-over';
+            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.strokeStyle = this.borderColor;
+            this.context.strokeRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.globalAlpha = 1;
+            this.context.fillStyle = this.borderColor;
+            this.context.font = 'bold 1.4em "JetBrains Mono"';
+            this.context.fillText("Next:", boxX + (boxWidth / 2 - 32), boxY + (boxHeight / 12), 64);
+            var upcomingPieceY = (boxHeight / 6) + (boxHeight / 12);
+            for (var _i = 0, _a = this.upcomingPieces; _i < _a.length; _i++) {
+                var piece = _a[_i];
+                var upcomingPieceCanvas = this.renderedPieces[piece];
+                var upcomingPieceX = boxX + (boxWidth / 2 - upcomingPieceCanvas.width / 2);
+                var upcomingPieceWidth = upcomingPieceCanvas.width;
+                var upcomingPieceHeight = upcomingPieceCanvas.height;
+                // this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY,
+                //     upcomingPieceWidth * (1 + (Math.sin(Date.now())/5)),
+                //     upcomingPieceHeight * (1 + (Math.sin(Date.now)/5)));
+                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
+                upcomingPieceY += boxHeight / 6;
             }
-            else if (this.titleScreen) {
-                this.drawTitle();
+            /*
+            // level
+            this.context.fillText(`gameLevel: ${this.gameLevel}`, 580, 20, 200);
+
+            // lines cleared
+            this.context.fillText(`linesCleared: ${this.linesCleared}`, 580, 60, 200);
+
+            // score
+            this.context.fillText(`score: ${this.score}`, 580, 100, 200);
+
+            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
+            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
+
+            // gametime
+            this.context.fillText(`gameTime: ${mins}:${secs}`, 580, 140, 200);
+
+            // draw that diag message
+            this.context.fillStyle = this.fontColor;
+            this.context.font = "0.8em JetBrains Mono";
+
+            for (let i = 0; i < this.diagMessage.length; i++) {
+                this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
+                this.context.fillText(`${this.diagMessage[i]}`,
+                    20, (i * 20) + 100, 200);
             }
-            else {
-                this.drawGameOver();
-            }
+
+             */
+        }
+        else if (this.titleScreen) {
+            this.drawTitle();
+        }
+        else {
+            this.drawGameOver();
         }
     };
     Tetris.prototype.drawPause = function () {
@@ -767,54 +902,36 @@ var Tetris = /** @class */ (function () {
         this.context.fillText("Press Enter to Start", this.canvas.width / 3 + 50, 300, this.canvas.width / 2);
     };
     // I think I could make this better, I'm not satisfied as it is
+    // todo: implement fade in with this.pauseOpacity and this.pauseOpacityTimer
     Tetris.prototype.drawOverlay = function () {
         this.context.fillStyle = this.pauseColor;
         this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     };
-    Tetris.prototype.lockActivePiece = function () {
-        /*
-        if (withTimer){
-            // handle piece fading to white
-            console.log("lockActivePiece called withTimer");
+    // used to render a piece for display only (next piece queue, held piece)
+    Tetris.renderCosmeticPiece = function (pieceType, canvas, blockSize, gridSize, color) {
+        if (!Tetromino.pieceTypes.includes(pieceType)) {
+            throw new Error("renderCosmeticPiece was not given a valid piece type!");
         }
-
-        // do I just fire this straight up?
-        clearTimeout(this.lockDelay);
-        this.lockDelay = null;
-
-        console.log(this.getLockDelay());
-        this.lockDelay = setTimeout(() => {
-            clearInterval(this.activePiece.gravity);
-            this.activePiece = null;
-            this.ghostPiece = null;
-            this.holdLock = false;
-            this.lockDelay = null;
-            this.spawnLock = false;
-        // }, withTimer ? 5000 : 0);
-        }, 5000);
-        console.log(this.getLockDelay());
-
-         */
-        clearInterval(this.activePiece.gravity);
-        this.activePiece = null;
-        this.ghostPiece = null;
-        this.holdLock = false;
-    };
-    Tetris.prototype.holdPiece = function () {
-        if (!this.holdLock) {
-            clearInterval(this.activePiece.gravity);
-            var tempPiece = this.activePiece;
-            this.activePiece.removeLockDelay();
-            this.activePiece = this.heldPiece !== null ?
-                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
-            this.ghostPiece = this.activePiece !== null ?
-                this.activePiece.getGhost() : null;
-            this.heldPiece = tempPiece;
-            this.holdLock = true;
+        var context = canvas.getContext('2d');
+        for (var i = 0; i < 4; i++) {
+            var blockCoords = Tetromino.startPositions[pieceType][i].split(":")
+                .map(function (x) { return parseInt(x); });
+            var xPos = gridSize + ((blockCoords[1] - 3) * (blockSize + gridSize));
+            var yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
+            context.fillStyle = color;
+            context.fillRect(xPos, yPos, blockSize, blockSize);
+            // let colorGradient = context.createLinearGradient(xPos + 4, xPos + 4,
+            //         xPos + blockSize - 4, yPos + blockSize - 4);
+            //TODO: Figure out the buggy gradient positioning
+            var colorGradient = context.createLinearGradient(xPos + 4, xPos + 4, xPos + blockSize - 4, yPos + blockSize - 4);
+            // this is the same in renderCosmeticPiece() and I don't like it, but I don't
+            // know how I'd make it universal
+            colorGradient.addColorStop(0, 'rgba(255,255,255,0.45)');
+            colorGradient.addColorStop(0.4, 'rgba(255,255,255,0.15)');
+            colorGradient.addColorStop(.65, "rgba(64,64,64,0)");
+            context.fillStyle = colorGradient;
+            context.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
         }
-    };
-    Tetris.prototype.setSpawnLock = function (state) {
-        this.spawnLock = state;
     };
     Tetris.prototype.log = function (message) {
         if (this.diagMessage.length >= this.logLength) {
@@ -828,16 +945,17 @@ var Tetris = /** @class */ (function () {
         }
         return Tetromino.pieceTypes.indexOf(piece.pieceType) + 1;
     };
-    Tetris.prototype.newPieceBag = function () {
-        this.pieceBag = __spreadArray([], Tetromino.pieceTypes);
+    Tetris.newPieceBag = function () {
+        var pieceBag = __spreadArray([], Tetromino.pieceTypes);
         for (var i = 0; i < 7; i++) {
             var randIndex = Math.floor(Math.random() * (7 - i));
             if (randIndex != i) {
-                var temp = this.pieceBag[i];
-                this.pieceBag[i] = this.pieceBag[randIndex];
-                this.pieceBag[randIndex] = temp;
+                var temp = pieceBag[i];
+                pieceBag[i] = pieceBag[randIndex];
+                pieceBag[randIndex] = temp;
             }
         }
+        return pieceBag;
     };
     return Tetris;
 }());
