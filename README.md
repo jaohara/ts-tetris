@@ -1,4 +1,6 @@
-# Tetris
+# Tetris.ts
+![ts](https://badgen.net/badge/-/TypeScript?icon=typescript&label&labelColor=blue&color=555555)
+
 Written by John O'Hara
 
 A browser-based tetris clone made in TypeScript.
@@ -7,7 +9,7 @@ A browser-based tetris clone made in TypeScript.
 
 ## Structure
 
-The project structure is a little jumbled right now - all three of the relevant classes for the game are contained in the same file, `tetris.ts`. From top to bottom you've got classes for `Tetromino`, `Well`, and `Tetris`.
+The project structure is a little jumbled right now - all of the relevant classes for the game are contained in the same file, `tetris.ts`. From top to bottom you've got classes for `Tetromino`, `Well`, and `Tetris`.
 
 To compile, just run `tsc tetris.ts`. `index.html` looks for the resulting `tetris.js`.
 
@@ -31,8 +33,16 @@ Because JS and TS are super weird about how `this` works, some methods relating 
 
 ## Todo / Bugs:
 
-- Rotation is really buggy in some cases. I outline some observations in comments in the `Tetromino` class - basically, in some circumstances parts of the pieces can rotate away from eachother, causing it to spread out as it rotates.
-    - Does this have something to do with motion and rotation happening at the same time? Would some sort of move/rotate lock during each of those operations fix this, or does this have to do with the rotation transform arrays?
-- Game states need to be implemented - game over, etc.
-- Implement scoring
-- Implement cleared line count so level/game speed can be calculated
+- Rotation isn't completely identical to how Tetris actually plays - some rotations that are partially obstructed (such as horizontally by the well or vertically by the block tower) won't be allowed. Noticeable when pieces are locking.
+- Locking bug - there's a bug that seems to happen on faster levels (>9) with certain pieces during the lock delay. Sometimes the lock delay never clears and all future spawned pieces immediately start locking upon being created
+    - This seems to happen more frequently when held pieces are swapped for pieces that are in the lock delay state
+- Random minor woes with intervals not properly clearing
+- Implement high score logging
+- Improve menus
+- Implement non-Chrome gamepad support
+- Improve gamepad controls - should pieces be allowed to immediately harddrop after horizontal movement, or should that have a delay to 
+prevent that from happening accidentally?
+- Line clear animation
+- Level up animation
+- Animate score increases? (increment score over period of time?)
+
