@@ -797,79 +797,94 @@ var Tetris = /** @class */ (function () {
             // maybe make this universal?
             this.context.fillStyle = '#bbb';
             this.context.font = '1.0em "JetBrains Mono"';
-            // left side
-            // held piece
-            this.context.fillText("heldPiece: " + (this.heldPiece !== null ? this.heldPiece.pieceType : null), 20, 20, 200);
-            // level
-            this.context.fillText("gameLevel: " + this.gameLevel, 20, 60, 200);
-            // lines cleared
-            this.context.fillText("linesCleared: " + this.linesCleared, 20, 100, 200);
-            // score
-            this.context.fillText("score: " + this.score, 20, 140, 200);
-            var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
-            var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
-            // gametime
-            this.context.fillText("gameTime: " + mins + ":" + secs, 20, 180, 200);
-            //right side
+            // UI boxes
+            // This box is a little wonky
+            // right box
+            var rBoxWidth = this.canvas.width / 6;
+            var rBoxHeight = ((this.blockSize + this.gridSize) * this.well.getGrid().length) + this.gridSize;
+            var rBoxX = this.canvas.width - 1.85 * (this.canvas.width / 4 - (rBoxWidth / 2));
+            var rBoxY = (this.canvas.height / 2 - (rBoxHeight / 2));
+            // upper-left box
+            var ulBoxWidth = rBoxWidth;
+            var ulBoxHeight = (rBoxHeight - this.blockSize) / 3;
+            var ulBoxX = (this.canvas.width / 4.5 - (ulBoxWidth / 2));
+            var ulBoxY = (this.canvas.height / 2 - (rBoxHeight / 2));
+            // bottom-left
+            var blBoxWidth = rBoxWidth;
+            var blBoxHeight = ulBoxHeight * 2;
+            var blBoxX = ulBoxX;
+            var blBoxY = ulBoxY + ulBoxHeight + this.blockSize;
+            // fill box backgrounds
             this.context.fillStyle = this.gridColor;
             this.context.filter = 'blur(5px)';
             this.context.globalCompositeOperation = 'multiply';
-            var boxWidth = this.canvas.width / 6;
-            var boxHeight = ((this.blockSize + this.gridSize) * this.well.getGrid().length) + this.gridSize;
-            var boxX = this.canvas.width - 1.5 * (this.canvas.width / 4 - (boxWidth / 2));
-            var boxY = (this.canvas.height / 2 - (boxHeight / 2));
-            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.context.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.context.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
+            // fill box main layers
             this.context.fillStyle = this.bgColor;
             this.context.filter = 'none';
-            this.context.globalAlpha = .8;
+            this.context.globalAlpha = .6;
             this.context.globalCompositeOperation = 'source-over';
-            this.context.fillRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.context.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.context.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
+            // stroke box borders
             this.context.strokeStyle = this.borderColor;
-            this.context.strokeRect(boxX, boxY, boxWidth, boxHeight);
+            this.context.strokeRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.context.strokeRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.context.strokeRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
             this.context.globalAlpha = 1;
-            this.context.fillStyle = this.borderColor;
-            this.context.font = 'bold 1.4em "JetBrains Mono"';
-            this.context.fillText("Next:", boxX + (boxWidth / 2 - 32), boxY + (boxHeight / 12), 64);
-            var upcomingPieceY = (boxHeight / 6) + (boxHeight / 12);
-            for (var _i = 0, _a = this.upcomingPieces; _i < _a.length; _i++) {
-                var piece = _a[_i];
-                var upcomingPieceCanvas = this.renderedPieces[piece];
-                var upcomingPieceX = boxX + (boxWidth / 2 - upcomingPieceCanvas.width / 2);
-                var upcomingPieceWidth = upcomingPieceCanvas.width;
-                var upcomingPieceHeight = upcomingPieceCanvas.height;
-                // this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY,
-                //     upcomingPieceWidth * (1 + (Math.sin(Date.now())/5)),
-                //     upcomingPieceHeight * (1 + (Math.sin(Date.now)/5)));
-                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
-                upcomingPieceY += boxHeight / 6;
-            }
             /*
+
             // level
-            this.context.fillText(`gameLevel: ${this.gameLevel}`, 580, 20, 200);
+            this.context.fillText(`gameLevel: ${this.gameLevel}`, 20, 60, 200);
 
             // lines cleared
-            this.context.fillText(`linesCleared: ${this.linesCleared}`, 580, 60, 200);
+            this.context.fillText(`linesCleared: ${this.linesCleared}`, 20, 100, 200);
 
             // score
-            this.context.fillText(`score: ${this.score}`, 580, 100, 200);
+            this.context.fillText(`score: ${this.score}`, 20, 140, 200);
 
             let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
             let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
 
             // gametime
-            this.context.fillText(`gameTime: ${mins}:${secs}`, 580, 140, 200);
-
-            // draw that diag message
-            this.context.fillStyle = this.fontColor;
-            this.context.font = "0.8em JetBrains Mono";
-
-            for (let i = 0; i < this.diagMessage.length; i++) {
-                this.context.fillStyle = this.fontColor + (255 - (i * Math.floor(255 / this.logLength))).toString(16);
-                this.context.fillText(`${this.diagMessage[i]}`,
-                    20, (i * 20) + 100, 200);
-            }
+            this.context.fillText(`gameTime: ${mins}:${secs}`, 20, 180, 200);
 
              */
+            // render text
+            this.context.fillStyle = this.borderColor;
+            this.context.font = 'bold 1.4em "JetBrains Mono"';
+            var lBoxTextX = ulBoxX + (ulBoxWidth / 2 - 32);
+            var lBoxTextY = ulBoxY + (rBoxHeight / 12);
+            var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
+            var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
+            this.context.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32), rBoxY + (rBoxHeight / 12), 64);
+            this.context.fillText("Held:", lBoxTextX, lBoxTextY, 64);
+            this.context.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
+            this.context.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
+            this.context.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
+            this.context.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
+            this.context.fillText("" + this.score, lBoxTextX, lBoxTextY * 3 + 32, 64);
+            this.context.fillText("" + this.linesCleared, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
+            this.context.fillText("" + this.gameLevel, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
+            this.context.fillText(mins + ":" + secs, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+            // render held piece
+            if (this.heldPiece !== null) {
+                var heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
+                var heldPieceX = ulBoxX + (ulBoxWidth / 2 - heldPieceCanvas.width / 2);
+                this.context.drawImage(heldPieceCanvas, heldPieceX, ((3 * rBoxHeight) / 12));
+            }
+            // render upcoming pieces
+            var upcomingPieceY = (rBoxHeight / 6) + (rBoxHeight / 12);
+            for (var _i = 0, _a = this.upcomingPieces; _i < _a.length; _i++) {
+                var piece = _a[_i];
+                var upcomingPieceCanvas = this.renderedPieces[piece];
+                var upcomingPieceX = rBoxX + (rBoxWidth / 2 - upcomingPieceCanvas.width / 2);
+                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
+                upcomingPieceY += rBoxHeight / 6;
+            }
         }
         else if (this.titleScreen) {
             this.drawTitle();
