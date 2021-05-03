@@ -980,10 +980,7 @@ var Tetris = /** @class */ (function () {
             var yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
             context.fillStyle = color;
             context.fillRect(xPos, yPos, blockSize, blockSize);
-            // let colorGradient = context.createLinearGradient(xPos + 4, xPos + 4,
-            //         xPos + blockSize - 4, yPos + blockSize - 4);
-            //TODO: Figure out the buggy gradient positioning
-            var colorGradient = context.createLinearGradient(xPos + 4, xPos + 4, xPos + blockSize - 4, yPos + blockSize - 4);
+            var colorGradient = context.createLinearGradient(xPos + 4, yPos + 4, xPos + blockSize - 4, yPos + blockSize - 4);
             // this is the same in renderCosmeticPiece() and I don't like it, but I don't
             // know how I'd make it universal
             colorGradient.addColorStop(0, 'rgba(255,255,255,0.45)');
