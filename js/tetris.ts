@@ -997,6 +997,8 @@ class Tetris {
             this.context.fillStyle = this.fontColor;
             this.context.font = `1.0em "${this.gameFont}"`;
 
+            let yOffset = 3 * Math.cos(Date.now()/600);
+
             // UI boxes
 
             // This box positioning is a little wonky
@@ -1046,26 +1048,6 @@ class Tetris {
 
             this.context.globalAlpha = 1;
 
-
-            /*
-
-            // level
-            this.context.fillText(`gameLevel: ${this.gameLevel}`, 20, 60, 200);
-
-            // lines cleared
-            this.context.fillText(`linesCleared: ${this.linesCleared}`, 20, 100, 200);
-
-            // score
-            this.context.fillText(`score: ${this.score}`, 20, 140, 200);
-
-            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
-            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
-
-            // gametime
-            this.context.fillText(`gameTime: ${mins}:${secs}`, 20, 180, 200);
-
-             */
-
             // render text
             this.context.fillStyle = this.borderColor;
             this.context.font = `bold 1.4em "${this.gameFont}"`;
@@ -1083,7 +1065,9 @@ class Tetris {
                     this.context.globalCompositeOperation = "overlay";
                 }
                 else {
-                    this.context.fillStyle = this.bezierColor1;
+                    // this.context.fillStyle = this.bezierColor1;
+                    this.context.fillStyle =
+                        `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l+30}%)`;
                     this.context.filter = 'none';
                     this.context.globalCompositeOperation = "source-over";
                 }
@@ -1104,12 +1088,19 @@ class Tetris {
                 this.context.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
                 this.context.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
             }
+
+            // get rotate ready
+
             // render held piece
             if (this.heldPiece !== null){
+                let xOffset = 2 * Math.sin(Date.now()/400);
+                let yOffset = 2 * Math.cos(Date.now()/400);
                 let heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
                 let heldPieceX = ulBoxX + (ulBoxWidth/2 - heldPieceCanvas.width/2);
+                let heldPieceY = ((3 * rBoxHeight)/12) + yOffset;
+                this.context.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
 
-                this.context.drawImage(heldPieceCanvas, heldPieceX, ((3 * rBoxHeight)/12));
+                //this.context.restore();
             }
 
 
@@ -1120,7 +1111,8 @@ class Tetris {
                 let upcomingPieceCanvas = this.renderedPieces[piece];
                 let upcomingPieceX = rBoxX + (rBoxWidth/2 - upcomingPieceCanvas.width/2);
 
-                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
+                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX,
+                    upcomingPieceY + yOffset);
                 upcomingPieceY += rBoxHeight / 6;
             }
         }

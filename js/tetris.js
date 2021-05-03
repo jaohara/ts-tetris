@@ -825,6 +825,7 @@ var Tetris = /** @class */ (function () {
         if (!this.gameOver) {
             this.context.fillStyle = this.fontColor;
             this.context.font = "1.0em \"" + this.gameFont + "\"";
+            var yOffset = 3 * Math.cos(Date.now() / 600);
             // UI boxes
             // This box positioning is a little wonky
             // right box
@@ -863,24 +864,6 @@ var Tetris = /** @class */ (function () {
             this.context.strokeRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
             this.context.strokeRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
             this.context.globalAlpha = 1;
-            /*
-
-            // level
-            this.context.fillText(`gameLevel: ${this.gameLevel}`, 20, 60, 200);
-
-            // lines cleared
-            this.context.fillText(`linesCleared: ${this.linesCleared}`, 20, 100, 200);
-
-            // score
-            this.context.fillText(`score: ${this.score}`, 20, 140, 200);
-
-            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
-            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
-
-            // gametime
-            this.context.fillText(`gameTime: ${mins}:${secs}`, 20, 180, 200);
-
-             */
             // render text
             this.context.fillStyle = this.borderColor;
             this.context.font = "bold 1.4em \"" + this.gameFont + "\"";
@@ -896,7 +879,9 @@ var Tetris = /** @class */ (function () {
                     this.context.globalCompositeOperation = "overlay";
                 }
                 else {
-                    this.context.fillStyle = this.bezierColor1;
+                    // this.context.fillStyle = this.bezierColor1;
+                    this.context.fillStyle =
+                        "hsl(" + this.bgGradientColor2.h + ", " + this.bgGradientColor2.s + "%, " + (this.bgGradientColor2.l + 30) + "%)";
                     this.context.filter = 'none';
                     this.context.globalCompositeOperation = "source-over";
                 }
@@ -912,11 +897,16 @@ var Tetris = /** @class */ (function () {
                 this.context.fillText("" + this.gameLevel, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
                 this.context.fillText(mins + ":" + secs, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
             }
+            // get rotate ready
             // render held piece
             if (this.heldPiece !== null) {
+                var xOffset = 2 * Math.sin(Date.now() / 400);
+                var yOffset_1 = 2 * Math.cos(Date.now() / 400);
                 var heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
                 var heldPieceX = ulBoxX + (ulBoxWidth / 2 - heldPieceCanvas.width / 2);
-                this.context.drawImage(heldPieceCanvas, heldPieceX, ((3 * rBoxHeight) / 12));
+                var heldPieceY = ((3 * rBoxHeight) / 12) + yOffset_1;
+                this.context.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
+                //this.context.restore();
             }
             // render upcoming pieces
             var upcomingPieceY = (rBoxHeight / 6) + (rBoxHeight / 12);
@@ -924,7 +914,7 @@ var Tetris = /** @class */ (function () {
                 var piece = _a[_i];
                 var upcomingPieceCanvas = this.renderedPieces[piece];
                 var upcomingPieceX = rBoxX + (rBoxWidth / 2 - upcomingPieceCanvas.width / 2);
-                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY);
+                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX, upcomingPieceY + yOffset);
                 upcomingPieceY += rBoxHeight / 6;
             }
         }
