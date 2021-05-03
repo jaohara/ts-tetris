@@ -395,6 +395,8 @@ var Well = /** @class */ (function () {
  */
 var Tetris = /** @class */ (function () {
     function Tetris() {
+        this.gamepad = null;
+        this.gamepadLastFrame = null;
         this.renderedPieces = {
             "I": HTMLCanvasElement,
             "J": HTMLCanvasElement,
@@ -418,10 +420,12 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
-        // timers from NodeJS.Timeout
         // game state
         this.activePiece = null;
+        this.autorepeatFrameLock = 0;
         this.gameOver = true;
+        this.gamepadConnected = false;
+        this.gamepadIndex = null;
         this.ghostPiece = null;
         this.heldPiece = null;
         this.highScore = 32000;
@@ -476,7 +480,7 @@ var Tetris = /** @class */ (function () {
             }
             Tetris.renderCosmeticPiece(pieceType, this.renderedPieces[pieceType], this.blockSize, this.gridSize, this.colorArray[Tetromino.pieceTypes.indexOf(pieceType) + 1]);
         }
-        // get high score from wherever it has been saved?
+        // todo: get high score from wherever it has been saved?
         this.start();
     }
     Tetris.prototype.start = function () {
@@ -485,6 +489,8 @@ var Tetris = /** @class */ (function () {
             this.running = true;
             // add controls
             document.addEventListener("keydown", Tetris.pollInput);
+            window.addEventListener("gamepadconnected", function (e) { return Tetris.setupGamepad(e, true); });
+            window.addEventListener("gamepaddisconnected", function (e) { return Tetris.setupGamepad(e, false); });
             //this.newGame();
             // MAIN GAME LOOP
             this.gameLoop = setInterval(function () {
@@ -492,10 +498,15 @@ var Tetris = /** @class */ (function () {
                 if (!_this.paused) {
                     _this.elapsedTime += Date.now() - _this.previousLoopTime;
                 }
+                _this.previousLoopTime = Date.now();
+                // check for gamepad input
+                if (_this.gamepadConnected) {
+                    Tetris.pollGamepad();
+                }
+                // DEBUG: report state current locking piece if it exists
                 if (_this.activePiece !== null && _this.activePiece.getLockPercentage() > 0) {
                     console.log("activePiece locking: " + _this.activePiece.getLockPercentage() + "%");
                 }
-                _this.previousLoopTime = Date.now();
                 if (!_this.titleScreen && !_this.paused && !_this.gameOver) {
                     // check for levelup
                     if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
@@ -503,11 +514,11 @@ var Tetris = /** @class */ (function () {
                         clearInterval(_this.activePiece.gravity);
                         _this.activePiece.gravity = null;
                     }
-                    // check if piece bag is exhausted
-                    // todo: store two piece bags so you can have a long prediction of pieces?
+                    // check if backup piece bag is exhausted
                     if (_this.pieceBagBackup.length <= 0) {
                         _this.pieceBagBackup = Tetris.newPieceBag();
                     }
+                    // check if piece bag is exhausted, swap in backup if it is
                     if (_this.pieceBag.length <= 0) {
                         _this.pieceBag = _this.pieceBagBackup;
                         _this.pieceBagBackup = [];
@@ -521,6 +532,7 @@ var Tetris = /** @class */ (function () {
                         console.log("this.activePiece: " + _this.activePiece + ", this.spawnLock: " + _this.spawnLock);
                         _this.newPiece();
                     }
+                    // give the active piece gravity if it doesn't have it
                     if (_this.activePiece.gravity === null) {
                         _this.activePiece.gravity = setInterval(function () {
                             if (!_this.paused) {
@@ -585,26 +597,35 @@ var Tetris = /** @class */ (function () {
             }
         }, this.updateFrequency);
     };
-    Tetris.pollInput = function (event) {
-        if (game.controls.includes(event.key)) {
-            event.preventDefault();
-            var key = event.key.includes("Arrow") ?
-                event.key.slice(5).toLowerCase() : event.key;
+    Tetris.pollInput = function (event, input, gamepadSource) {
+        if (event === void 0) { event = null; }
+        if (input === void 0) { input = null; }
+        if (gamepadSource === void 0) { gamepadSource = false; }
+        console.log("event: " + event + ", input: " + input);
+        // my logic seems redundant here but I dunno
+        if (event !== null) {
+            input = event.key;
+        }
+        if (game.controls.includes(input)) {
+            if (event !== null) {
+                event.preventDefault();
+            }
+            input = input.includes("Arrow") ? input.slice(5).toLowerCase() : input;
             if (!game.titleScreen && !game.gameOver) {
-                if (key === "Escape" || key === "p") {
+                if (input === "Escape" || input === "p") {
                     game.pause();
                 }
                 else if (game.activePiece !== null && !game.paused) {
-                    if (["left", "right", "down"].includes(key)) {
+                    if (["left", "right", "down"].includes(input)) {
                         if (game.activePiece.moveLock) {
-                            game.activePiece.moveQueue.enqueue("move:" + key);
+                            game.activePiece.moveQueue.enqueue("move:" + input);
                         }
                         else {
-                            game.activePiece.move(key);
+                            game.activePiece.move(input);
                         }
                     }
-                    else if (key === "up" || key === "e") {
-                        var direction = key == "up" ? "right" : "left";
+                    else if (input === "up" || input === "e") {
+                        var direction = input == "up" ? "right" : "left";
                         if (game.activePiece.moveLock) {
                             game.activePiece.moveQueue.enqueue("rotate:" + direction);
                         }
@@ -612,21 +633,57 @@ var Tetris = /** @class */ (function () {
                             game.activePiece.rotate(direction);
                         }
                     }
-                    else if (key === " ") {
+                    else if (input === " ") {
                         game.activePiece.hardDrop();
                     }
-                    else if (key === "f") {
+                    else if (input === "f") {
                         game.holdPiece();
                     }
                 }
             }
             else {
                 // should only be on game over and title screen states
-                if (key === "Enter" || key === "n") {
+                if (input === "Enter" || input === "n" || gamepadSource && (input === "Escape" || input === "ArrowUp")) {
                     game.newGame();
                 }
             }
         }
+    };
+    Tetris.pollGamepad = function () {
+        if (game.gamepadConnected && game.gamepad !== null) {
+            game.gamepad = navigator.getGamepads()[game.gamepadIndex];
+            var repeatableActions = ["ArrowLeft", "ArrowRight", "ArrowDown"];
+            for (var i = 0; i < game.gamepad.buttons.length; i++) {
+                if (game.gamepad.buttons[i].pressed && Tetris.gamepadMap.hasOwnProperty(i)) {
+                    if (repeatableActions.includes(Tetris.gamepadMap[i])) {
+                        // probably shouldn't allow any motion if the hard drop was pressed last frame
+                        // todo: I don't think this should be hardcoded
+                        if (!game.gamepadLastFrame.buttons[12].pressed) {
+                            if (game.autorepeatFrameLock <= 0 ||
+                                game.gamepad.buttons[i].pressed !== game.gamepadLastFrame.buttons[i].pressed) {
+                                Tetris.pollInput(null, Tetris.gamepadMap[i], true);
+                                game.autorepeatFrameLock = Tetris.gamepadMap[i] === "ArrowDown" ? 0 : 6;
+                            }
+                            else {
+                                game.autorepeatFrameLock--;
+                            }
+                        }
+                    }
+                    else if (game.gamepadLastFrame === null ||
+                        game.gamepad.buttons[i].pressed !== game.gamepadLastFrame.buttons[i].pressed) {
+                        // maybe restrict hard drop immediately after motion?
+                        Tetris.pollInput(null, Tetris.gamepadMap[i], true);
+                    }
+                }
+            }
+            game.gamepadLastFrame = game.gamepad;
+        }
+    };
+    Tetris.setupGamepad = function (event, connected) {
+        game.gamepadConnected = connected;
+        game.gamepad = connected ? event.gamepad : null;
+        game.gamepadIndex = game.gamepad.index;
+        console.log("Gamepad[" + game.gamepadIndex + "] " + (connected ? "" : "dis") + "connected");
     };
     Tetris.prototype.newGame = function () {
         this.elapsedTime = 0;
@@ -997,6 +1054,20 @@ var Tetris = /** @class */ (function () {
             }
         }
         return pieceBag;
+    };
+    // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
+    //  there's probably a better way to map these
+    Tetris.gamepadMap = {
+        0: "ArrowUp",
+        1: "e",
+        4: "f",
+        5: "f",
+        8: "Enter",
+        9: "Escape",
+        12: " ",
+        13: "ArrowDown",
+        14: "ArrowLeft",
+        15: "ArrowRight"
     };
     return Tetris;
 }());
