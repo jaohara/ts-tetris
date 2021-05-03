@@ -1,10 +1,10 @@
-// TETRIS.JS
+// TETRIS.TS - THE SOVIET MIND GAME
 
 /**
  * Tetromino - A class used to represent a game piece.
  *
- * Generally only instantiated once, stored as "Tetris.activeGamepiece". Contains instsance
- * methods for movement, rotation, hard drops.
+ * Generally only instantiated twice, stored as "Tetris.activeGamepiece" and "Tetris.ghostPiece".
+ * Contains instance methods for movement, rotation, hard drops.
  *
  * Contains static members for data about piece types, initial piece locations,
  * and rotation transform instructions.
@@ -83,9 +83,6 @@ class Tetromino {
 
     private lockDelay: ReturnType<typeof setTimeout> = null;
     private lockPercentage: number;
-
-    // DEBUG
-    private moveCount = 0;
 
     private pos: string[];
     private rotation = [0, 1, 2, 3];
@@ -442,9 +439,6 @@ class Well {
             lineScore *= this.game.getLevel();
 
             console.log(`linesCleared: ${linesCleared} - lineScore: ${lineScore}`);
-            let lineString = linesCleared == 1 ? `${linesCleared} line,` : linesCleared == 4 ?
-                "TETRIS!" : `${linesCleared} lines,`;
-            this.game.log(`${lineString} scored ${lineScore}`);
             this.game.addScore(lineScore);
         }
 
@@ -485,16 +479,12 @@ class Tetris {
 
     // game settings
     private readonly blockSize = 24;
-    private readonly DEBUG = true;
     private readonly frameRate = 60;
-    // private readonly frameRate = 10;
-    // were I a smarter man I'd use the formula, but I'm not, so this works
     private readonly gameSpeed = [
-        0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0899,
-        0.1312, 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
-    ];
+        0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0879,
+        (0.1312-.0076), 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
+    ]; // all cops means all cops
     private readonly ghostPieceOpacity = 48;    // 0-255
-    // private readonly gridSize = 3;
     private readonly gridSize = 1;
     readonly updateFrequency = 1000 / this.frameRate;
 
@@ -510,14 +500,12 @@ class Tetris {
     private elapsedTime: number;
     private gameLoop: ReturnType<typeof setTimeout>;
     private gameOver: boolean = true;
-    private gameTimer: ReturnType<typeof setTimeout>;   // todo: do I actually need this?
     private gameLevel: number;
     private ghostPiece: Tetromino = null;
     private heldPiece: Tetromino = null;
     private highScore: number = 32000;
     private holdLock: boolean = false;
     private linesCleared: number;
-    private lockDelay: ReturnType<typeof setTimeout> = null;
     private paused: boolean;
     private pieceBag: string[] = [];
     private pieceBagBackup: string[] = [];
@@ -528,12 +516,6 @@ class Tetris {
     private spawnLock: boolean;
     private titleScreen: boolean = true;
 
-
-    // TODO: REMOVE AFTER DEBUG... maybe?
-    diagMessage: string[];
-    private readonly logLength: number = 24;
-
-
     // graphics stuff
     /*
         COLOR ARRAY ORDER:        I, J, L, O, S, T, Z
@@ -542,15 +524,21 @@ class Tetris {
         lt blue, darkblue, orange, yellow, green, purple, red
      */
     private readonly bgColor        = '#1b1d24';
-    private readonly bgColor1       = '#3498db';    // TODO: these need better names
-    private readonly bgColor2       = '#68e4b6'     //  <-
+    private bgGradientColor1        = {'h': 240, 's': 69, 'l': 13};
+    private bgGradientColor2        = {'h': 216, 's': 84, 'l': 36};
+    private bgGradientTarget1       = 240;
+    private bgGradientTarget2       = 216;
+    private bgGradientTimer: ReturnType<typeof setInterval> = null;
+    private readonly bezierColor1   = '#3498db';
+    private readonly bezierColor2   = '#68e4b6';
     private readonly borderColor    = '#bbb';
-    private readonly pauseColor     = '#1b1d24aa'   // todo: use pauseOpacity for alpha
-    private pauseFinalOpacity       = 85; // out of 255
-    private pauseOpacity            = 0;
-    private pauseOpacityTimer: ReturnType<typeof setInterval> = null;
-    private readonly fontColor      = '#68e4b6';
-    // private readonly gridColor  = '#282c34';
+    private readonly pauseColor     = '#000';
+    private readonly gameFont       = 'Poppins';
+    private overlayFinalOpacity     = .4; // 0-1.0
+    private overlayOpacity          = 0;
+    private overlayOpacityTimer: ReturnType<typeof setInterval> = null;
+    private pauseOverlay: boolean;
+    private readonly fontColor      = '#bbb';
     private readonly gridColor      = '#9b9ba9';
     private readonly colorArray     = [
         '#1b1d24', '#3498db', '#273ac5', '#e97e03',
@@ -614,7 +602,6 @@ class Tetris {
                     // check for levelup
                     if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15){
                         this.gameLevel++;
-                        this.log("level up!");
                         clearInterval(this.activePiece.gravity);
                         this.activePiece.gravity = null;
                     }
@@ -690,7 +677,26 @@ class Tetris {
     // todo: have a pause menu controllable by arrow keys
     pause(): void {
         this.paused = !this.paused;
+        this.pauseOverlay = true;
         console.log(`game ${this.paused ? "paused" : "unpaused"}`);
+
+        clearInterval(this.overlayOpacityTimer);
+        this.overlayOpacityTimer = null;
+
+        this.overlayOpacityTimer = setInterval(() => {
+            let direction = this.paused ? 1 : -1;
+            this.overlayOpacity += direction * (this.overlayFinalOpacity / 8);
+
+            if (this.overlayOpacity > this.overlayFinalOpacity ||this.overlayOpacity < 0){
+                clearInterval(this.overlayOpacityTimer);
+                this.overlayOpacityTimer = null;
+
+                if (this.overlayOpacity < 0){
+                    this.overlayOpacity = 0;
+                    this.pauseOverlay = false;
+                }
+            }
+        }, this.updateFrequency);
     }
 
     private static pollInput(event: KeyboardEvent): void {
@@ -735,9 +741,6 @@ class Tetris {
     }
 
     private newGame(): void{
-        // reset game state
-
-        this.diagMessage = [];
         this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
@@ -746,8 +749,6 @@ class Tetris {
         this.score = 0;
         this.titleScreen = false;
         this.well.resetWell();
-
-        this.log("new game started");
     }
 
     private newPiece(): void {
@@ -763,6 +764,34 @@ class Tetris {
 
     lineClear(): void {
         this.linesCleared++;
+
+        this.bgGradientTarget1 += 3;
+        this.bgGradientTarget2 += 3;
+        this.bgGradientTarget1 = this.bgGradientTarget1 > 360 ?
+            this.bgGradientTarget1 - 360 : this.bgGradientTarget1;
+        this.bgGradientTarget2 = this.bgGradientTarget2 > 360 ?
+            this.bgGradientTarget2 - 360 : this.bgGradientTarget2;
+
+
+        // shift bg gradient pattern with additional cleared lines
+        if (this.bgGradientTimer === null) {
+            this.bgGradientTimer = setInterval(() => {
+                this.bgGradientColor1.h++;
+                this.bgGradientColor2.h++;
+
+                this.bgGradientColor1.h = this.bgGradientColor1.h > 360 ?
+                    this.bgGradientColor1.h - 360 : this.bgGradientColor1.h;
+                this.bgGradientColor2.h = this.bgGradientColor2.h > 360 ?
+                    this.bgGradientColor2.h - 360 : this.bgGradientColor2.h;
+
+                if (this.bgGradientColor1.h >= this.bgGradientTarget1 &&
+                    this.bgGradientColor2.h >= this.bgGradientTarget2){
+                    clearInterval(this.bgGradientTimer);
+                    this.bgGradientTimer = null;
+                }
+
+            }, this.updateFrequency * 4);
+        }
     }
 
     lockActivePiece() {
@@ -839,15 +868,17 @@ class Tetris {
         let bgGradient = this.context.createLinearGradient(w+200 - w/8 + sinOffset/10,0,
             200 + w/8 + cosOffset/10,h);
         //bgGradient.addColorStop(1, '#111112');
-        bgGradient.addColorStop(1, '#0a0a37');
-        bgGradient.addColorStop(0, '#0f4ba7');
+        bgGradient.addColorStop(1,
+            `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
+        bgGradient.addColorStop(0,
+            `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
         this.context.fillStyle = bgGradient;
         this.context.fillRect(0, 0, w, h);
 
         // create bezier gradient
         let bezierGradient = this.context.createLinearGradient(0,0, w, h);
-        bezierGradient.addColorStop(0,this.bgColor1);
-        bezierGradient.addColorStop(1,this.bgColor2);
+        bezierGradient.addColorStop(0,this.bezierColor1);
+        bezierGradient.addColorStop(1,this.bezierColor2);
         this.context.strokeStyle = bezierGradient;
         this.context.globalCompositeOperation = "overlay";
 
@@ -963,13 +994,12 @@ class Tetris {
 
     private drawUI(sinOffset: number, cosOffset: number) {
         if (!this.gameOver) {
-            // maybe make this universal?
-            this.context.fillStyle = '#bbb';
-            this.context.font = '1.0em "JetBrains Mono"';
+            this.context.fillStyle = this.fontColor;
+            this.context.font = `1.0em "${this.gameFont}"`;
 
             // UI boxes
 
-            // This box is a little wonky
+            // This box positioning is a little wonky
 
             // right box
             let rBoxWidth    = this.canvas.width/6;
@@ -1038,26 +1068,42 @@ class Tetris {
 
             // render text
             this.context.fillStyle = this.borderColor;
-            this.context.font = 'bold 1.4em "JetBrains Mono"';
+            this.context.font = `bold 1.4em "${this.gameFont}"`;
             let lBoxTextX = ulBoxX + (ulBoxWidth/2 - 32);
             let lBoxTextY = ulBoxY + (rBoxHeight / 12);
             let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
             let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
 
-            this.context.fillText("Next:", rBoxX + (rBoxWidth/2 - 32),
-            rBoxY + (rBoxHeight / 12), 64);
-            this.context.fillText("Held:", lBoxTextX, lBoxTextY, 64);
 
-            this.context.fillText("Score:", lBoxTextX, lBoxTextY*3, 64);
-            this.context.fillText("Lines:", lBoxTextX, lBoxTextY*3.75, 64);
-            this.context.fillText("Level:", lBoxTextX, lBoxTextY*4.5, 64);
-            this.context.fillText("Time:", lBoxTextX, lBoxTextY*5.25, 64);
+            // render twice, once with background
+            for(let i = 0; i < 2; i++) {
+                if (i == 0){
+                    this.context.fillStyle = this.bgColor;
+                    this.context.filter = 'blur(2px)';
+                    this.context.globalCompositeOperation = "overlay";
+                }
+                else {
+                    this.context.fillStyle = this.bezierColor1;
+                    this.context.filter = 'none';
+                    this.context.globalCompositeOperation = "source-over";
+                }
 
-            this.context.fillText(`${this.score}`, lBoxTextX, lBoxTextY*3 + 32, 64);
-            this.context.fillText(`${this.linesCleared}`, lBoxTextX, lBoxTextY*3.75 + 32, 64);
-            this.context.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY*4.5 + 32, 64);
-            this.context.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY*5.25 + 32, 64);
+                this.context.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32),
+                    rBoxY + (rBoxHeight / 12), 64);
+                this.context.fillText("Hold:", lBoxTextX - i, lBoxTextY-i, 64);
 
+                this.context.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
+                this.context.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
+                this.context.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
+                this.context.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
+
+                this.context.fillStyle = i == 1 ? this.borderColor : this.context.fillStyle;
+
+                this.context.fillText(`${this.score}`, lBoxTextX, lBoxTextY * 3 + 32, 64);
+                this.context.fillText(`${this.linesCleared}`, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
+                this.context.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
+                this.context.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+            }
             // render held piece
             if (this.heldPiece !== null){
                 let heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
@@ -1087,13 +1133,15 @@ class Tetris {
     }
 
     private drawPause() {
-        if (this.paused){
+        if (this.pauseOverlay){
             this.drawOverlay();
 
             this.context.fillStyle = this.fontColor;
-            this.context.font = "3.0em JetBrains Mono";
+            this.context.font = `3.0em "${this.gameFont}"`;
+            this.context.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
             this.context.fillText("Pause", this.canvas.width/3+64,
                 this.canvas.height/2, this.canvas.height/2);
+            this.context.globalAlpha = 1;
         }
     }
 
@@ -1101,20 +1149,18 @@ class Tetris {
         this.drawOverlay()
 
         this.context.fillStyle = this.fontColor
-        this.context.font = "3.0em JetBrains Mono"
+        this.context.font = `3.0em "${this.gameFont}"`;
         this.context.fillText("Game Over", this.canvas.width/3+50,
             this.canvas.height/2, this.canvas.width);
     }
 
     private drawTitle() {
-        this.drawOverlay();
-
         this.context.fillStyle = this.fontColor;
-        this.context.font = "5.0em JetBrains Mono";
+        this.context.font = `5.0em "${this.gameFont}"`;
         this.context.fillText("Tetris", 20,
             80, this.canvas.width);
 
-        this.context.font = "1.0em JetBrains Mono";
+        this.context.font = `1.0em "${this.gameFont}"`;
 
         this.context.fillText("Programmed by John O'Hara in 2021",
             40, 120, this.canvas.width/2);
@@ -1125,10 +1171,12 @@ class Tetris {
     }
 
     // I think I could make this better, I'm not satisfied as it is
-    // todo: implement fade in with this.pauseOpacity and this.pauseOpacityTimer
+    // todo: implement fade in with this.pauseOpacity and this.overlayOpacityTimer
     private drawOverlay(){
+        this.context.globalAlpha = this.overlayOpacity;
         this.context.fillStyle = this.pauseColor;
         this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+        this.context.globalAlpha = 1;
     }
 
     // used to render a piece for display only (next piece queue, held piece)
@@ -1172,14 +1220,6 @@ class Tetris {
         }
     }
 
-    log(message: string){
-        if (this.diagMessage.length >= this.logLength){
-            this.diagMessage.pop();
-        }
-
-        this.diagMessage.unshift(message);
-    }
-
     private static getPieceColorIndex(piece: Tetromino): number {
         if (piece == null) {
             return 0;
@@ -1213,4 +1253,3 @@ document.getElementById("stop-button").addEventListener("click",() => game.stop(
 
 document.getElementById("build-timestamp").innerText = document.lastModified;
 
-console.log(game);

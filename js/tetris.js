@@ -1,4 +1,4 @@
-// TETRIS.JS
+// TETRIS.TS - THE SOVIET MIND GAME
 var __spreadArray = (this && this.__spreadArray) || function (to, from) {
     for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
         to[j] = from[i];
@@ -7,8 +7,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from) {
 /**
  * Tetromino - A class used to represent a game piece.
  *
- * Generally only instantiated once, stored as "Tetris.activeGamepiece". Contains instsance
- * methods for movement, rotation, hard drops.
+ * Generally only instantiated twice, stored as "Tetris.activeGamepiece" and "Tetris.ghostPiece".
+ * Contains instance methods for movement, rotation, hard drops.
  *
  * Contains static members for data about piece types, initial piece locations,
  * and rotation transform instructions.
@@ -19,8 +19,6 @@ var Tetromino = /** @class */ (function () {
         if (pos === void 0) { pos = null; }
         this.gravity = null;
         this.lockDelay = null;
-        // DEBUG
-        this.moveCount = 0;
         this.rotation = [0, 1, 2, 3];
         if (Tetromino.pieceTypes.includes(pieceType)) {
             this.game = game;
@@ -376,9 +374,6 @@ var Well = /** @class */ (function () {
             lineScore -= linesCleared < 4 ? 100 : 0;
             lineScore *= this.game.getLevel();
             console.log("linesCleared: " + linesCleared + " - lineScore: " + lineScore);
-            var lineString = linesCleared == 1 ? linesCleared + " line," : linesCleared == 4 ?
-                "TETRIS!" : linesCleared + " lines,";
-            this.game.log(lineString + " scored " + lineScore);
             this.game.addScore(lineScore);
         }
         this.game.setSpawnLock(false);
@@ -411,16 +406,12 @@ var Tetris = /** @class */ (function () {
         };
         // game settings
         this.blockSize = 24;
-        this.DEBUG = true;
         this.frameRate = 60;
-        // private readonly frameRate = 10;
-        // were I a smarter man I'd use the formula, but I'm not, so this works
         this.gameSpeed = [
-            0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0899,
-            0.1312, 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
-        ];
+            0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0879,
+            (0.1312 - .0076), 0.1775, 0.2598, 0.388, 0.59, 0.92, 1.46, 2.36
+        ]; // all cops means all cops
         this.ghostPieceOpacity = 48; // 0-255
-        // private readonly gridSize = 3;
         this.gridSize = 1;
         this.updateFrequency = 1000 / this.frameRate;
         this.controls = [
@@ -435,11 +426,9 @@ var Tetris = /** @class */ (function () {
         this.heldPiece = null;
         this.highScore = 32000;
         this.holdLock = false;
-        this.lockDelay = null;
         this.pieceBag = [];
         this.pieceBagBackup = [];
         this.titleScreen = true;
-        this.logLength = 24;
         // graphics stuff
         /*
             COLOR ARRAY ORDER:        I, J, L, O, S, T, Z
@@ -448,15 +437,20 @@ var Tetris = /** @class */ (function () {
             lt blue, darkblue, orange, yellow, green, purple, red
          */
         this.bgColor = '#1b1d24';
-        this.bgColor1 = '#3498db'; // TODO: these need better names
-        this.bgColor2 = '#68e4b6'; //  <-
+        this.bgGradientColor1 = { 'h': 240, 's': 69, 'l': 13 };
+        this.bgGradientColor2 = { 'h': 216, 's': 84, 'l': 36 };
+        this.bgGradientTarget1 = 240;
+        this.bgGradientTarget2 = 216;
+        this.bgGradientTimer = null;
+        this.bezierColor1 = '#3498db';
+        this.bezierColor2 = '#68e4b6';
         this.borderColor = '#bbb';
-        this.pauseColor = '#1b1d24aa'; // todo: use pauseOpacity for alpha
-        this.pauseFinalOpacity = 85; // out of 255
-        this.pauseOpacity = 0;
-        this.pauseOpacityTimer = null;
-        this.fontColor = '#68e4b6';
-        // private readonly gridColor  = '#282c34';
+        this.pauseColor = '#000';
+        this.gameFont = 'Poppins';
+        this.overlayFinalOpacity = .4; // 0-1.0
+        this.overlayOpacity = 0;
+        this.overlayOpacityTimer = null;
+        this.fontColor = '#bbb';
         this.gridColor = '#9b9ba9';
         this.colorArray = [
             '#1b1d24', '#3498db', '#273ac5', '#e97e03',
@@ -506,7 +500,6 @@ var Tetris = /** @class */ (function () {
                     // check for levelup
                     if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
                         _this.gameLevel++;
-                        _this.log("level up!");
                         clearInterval(_this.activePiece.gravity);
                         _this.activePiece.gravity = null;
                     }
@@ -573,8 +566,24 @@ var Tetris = /** @class */ (function () {
     };
     // todo: have a pause menu controllable by arrow keys
     Tetris.prototype.pause = function () {
+        var _this = this;
         this.paused = !this.paused;
+        this.pauseOverlay = true;
         console.log("game " + (this.paused ? "paused" : "unpaused"));
+        clearInterval(this.overlayOpacityTimer);
+        this.overlayOpacityTimer = null;
+        this.overlayOpacityTimer = setInterval(function () {
+            var direction = _this.paused ? 1 : -1;
+            _this.overlayOpacity += direction * (_this.overlayFinalOpacity / 8);
+            if (_this.overlayOpacity > _this.overlayFinalOpacity || _this.overlayOpacity < 0) {
+                clearInterval(_this.overlayOpacityTimer);
+                _this.overlayOpacityTimer = null;
+                if (_this.overlayOpacity < 0) {
+                    _this.overlayOpacity = 0;
+                    _this.pauseOverlay = false;
+                }
+            }
+        }, this.updateFrequency);
     };
     Tetris.pollInput = function (event) {
         if (game.controls.includes(event.key)) {
@@ -620,8 +629,6 @@ var Tetris = /** @class */ (function () {
         }
     };
     Tetris.prototype.newGame = function () {
-        // reset game state
-        this.diagMessage = [];
         this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
@@ -630,7 +637,6 @@ var Tetris = /** @class */ (function () {
         this.score = 0;
         this.titleScreen = false;
         this.well.resetWell();
-        this.log("new game started");
     };
     Tetris.prototype.newPiece = function () {
         console.log("Generating new piece...");
@@ -642,7 +648,30 @@ var Tetris = /** @class */ (function () {
         this.upcomingPieces = pieceBagContents.concat(pieceBagBackupContents).slice(0, 5);
     };
     Tetris.prototype.lineClear = function () {
+        var _this = this;
         this.linesCleared++;
+        this.bgGradientTarget1 += 3;
+        this.bgGradientTarget2 += 3;
+        this.bgGradientTarget1 = this.bgGradientTarget1 > 360 ?
+            this.bgGradientTarget1 - 360 : this.bgGradientTarget1;
+        this.bgGradientTarget2 = this.bgGradientTarget2 > 360 ?
+            this.bgGradientTarget2 - 360 : this.bgGradientTarget2;
+        // shift bg gradient pattern with additional cleared lines
+        if (this.bgGradientTimer === null) {
+            this.bgGradientTimer = setInterval(function () {
+                _this.bgGradientColor1.h++;
+                _this.bgGradientColor2.h++;
+                _this.bgGradientColor1.h = _this.bgGradientColor1.h > 360 ?
+                    _this.bgGradientColor1.h - 360 : _this.bgGradientColor1.h;
+                _this.bgGradientColor2.h = _this.bgGradientColor2.h > 360 ?
+                    _this.bgGradientColor2.h - 360 : _this.bgGradientColor2.h;
+                if (_this.bgGradientColor1.h >= _this.bgGradientTarget1 &&
+                    _this.bgGradientColor2.h >= _this.bgGradientTarget2) {
+                    clearInterval(_this.bgGradientTimer);
+                    _this.bgGradientTimer = null;
+                }
+            }, this.updateFrequency * 4);
+        }
     };
     Tetris.prototype.lockActivePiece = function () {
         clearInterval(this.activePiece.gravity);
@@ -699,14 +728,14 @@ var Tetris = /** @class */ (function () {
         // draw bg gradient
         var bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0, 200 + w / 8 + cosOffset / 10, h);
         //bgGradient.addColorStop(1, '#111112');
-        bgGradient.addColorStop(1, '#0a0a37');
-        bgGradient.addColorStop(0, '#0f4ba7');
+        bgGradient.addColorStop(1, "hsl(" + this.bgGradientColor1.h + ", " + this.bgGradientColor1.s + "%, " + this.bgGradientColor1.l + "%)");
+        bgGradient.addColorStop(0, "hsl(" + this.bgGradientColor2.h + ", " + this.bgGradientColor2.s + "%, " + this.bgGradientColor2.l + "%)");
         this.context.fillStyle = bgGradient;
         this.context.fillRect(0, 0, w, h);
         // create bezier gradient
         var bezierGradient = this.context.createLinearGradient(0, 0, w, h);
-        bezierGradient.addColorStop(0, this.bgColor1);
-        bezierGradient.addColorStop(1, this.bgColor2);
+        bezierGradient.addColorStop(0, this.bezierColor1);
+        bezierGradient.addColorStop(1, this.bezierColor2);
         this.context.strokeStyle = bezierGradient;
         this.context.globalCompositeOperation = "overlay";
         // create bezier curves
@@ -794,11 +823,10 @@ var Tetris = /** @class */ (function () {
     };
     Tetris.prototype.drawUI = function (sinOffset, cosOffset) {
         if (!this.gameOver) {
-            // maybe make this universal?
-            this.context.fillStyle = '#bbb';
-            this.context.font = '1.0em "JetBrains Mono"';
+            this.context.fillStyle = this.fontColor;
+            this.context.font = "1.0em \"" + this.gameFont + "\"";
             // UI boxes
-            // This box is a little wonky
+            // This box positioning is a little wonky
             // right box
             var rBoxWidth = this.canvas.width / 6;
             var rBoxHeight = ((this.blockSize + this.gridSize) * this.well.getGrid().length) + this.gridSize;
@@ -855,21 +883,35 @@ var Tetris = /** @class */ (function () {
              */
             // render text
             this.context.fillStyle = this.borderColor;
-            this.context.font = 'bold 1.4em "JetBrains Mono"';
+            this.context.font = "bold 1.4em \"" + this.gameFont + "\"";
             var lBoxTextX = ulBoxX + (ulBoxWidth / 2 - 32);
             var lBoxTextY = ulBoxY + (rBoxHeight / 12);
             var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
             var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
-            this.context.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32), rBoxY + (rBoxHeight / 12), 64);
-            this.context.fillText("Held:", lBoxTextX, lBoxTextY, 64);
-            this.context.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
-            this.context.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
-            this.context.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
-            this.context.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
-            this.context.fillText("" + this.score, lBoxTextX, lBoxTextY * 3 + 32, 64);
-            this.context.fillText("" + this.linesCleared, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
-            this.context.fillText("" + this.gameLevel, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
-            this.context.fillText(mins + ":" + secs, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+            // render twice, once with background
+            for (var i = 0; i < 2; i++) {
+                if (i == 0) {
+                    this.context.fillStyle = this.bgColor;
+                    this.context.filter = 'blur(2px)';
+                    this.context.globalCompositeOperation = "overlay";
+                }
+                else {
+                    this.context.fillStyle = this.bezierColor1;
+                    this.context.filter = 'none';
+                    this.context.globalCompositeOperation = "source-over";
+                }
+                this.context.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32), rBoxY + (rBoxHeight / 12), 64);
+                this.context.fillText("Hold:", lBoxTextX - i, lBoxTextY - i, 64);
+                this.context.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
+                this.context.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
+                this.context.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
+                this.context.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
+                this.context.fillStyle = i == 1 ? this.borderColor : this.context.fillStyle;
+                this.context.fillText("" + this.score, lBoxTextX, lBoxTextY * 3 + 32, 64);
+                this.context.fillText("" + this.linesCleared, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
+                this.context.fillText("" + this.gameLevel, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
+                this.context.fillText(mins + ":" + secs, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+            }
             // render held piece
             if (this.heldPiece !== null) {
                 var heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
@@ -894,33 +936,36 @@ var Tetris = /** @class */ (function () {
         }
     };
     Tetris.prototype.drawPause = function () {
-        if (this.paused) {
+        if (this.pauseOverlay) {
             this.drawOverlay();
             this.context.fillStyle = this.fontColor;
-            this.context.font = "3.0em JetBrains Mono";
+            this.context.font = "3.0em \"" + this.gameFont + "\"";
+            this.context.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
             this.context.fillText("Pause", this.canvas.width / 3 + 64, this.canvas.height / 2, this.canvas.height / 2);
+            this.context.globalAlpha = 1;
         }
     };
     Tetris.prototype.drawGameOver = function () {
         this.drawOverlay();
         this.context.fillStyle = this.fontColor;
-        this.context.font = "3.0em JetBrains Mono";
+        this.context.font = "3.0em \"" + this.gameFont + "\"";
         this.context.fillText("Game Over", this.canvas.width / 3 + 50, this.canvas.height / 2, this.canvas.width);
     };
     Tetris.prototype.drawTitle = function () {
-        this.drawOverlay();
         this.context.fillStyle = this.fontColor;
-        this.context.font = "5.0em JetBrains Mono";
+        this.context.font = "5.0em \"" + this.gameFont + "\"";
         this.context.fillText("Tetris", 20, 80, this.canvas.width);
-        this.context.font = "1.0em JetBrains Mono";
+        this.context.font = "1.0em \"" + this.gameFont + "\"";
         this.context.fillText("Programmed by John O'Hara in 2021", 40, 120, this.canvas.width / 2);
         this.context.fillText("Press Enter to Start", this.canvas.width / 3 + 50, 300, this.canvas.width / 2);
     };
     // I think I could make this better, I'm not satisfied as it is
-    // todo: implement fade in with this.pauseOpacity and this.pauseOpacityTimer
+    // todo: implement fade in with this.pauseOpacity and this.overlayOpacityTimer
     Tetris.prototype.drawOverlay = function () {
+        this.context.globalAlpha = this.overlayOpacity;
         this.context.fillStyle = this.pauseColor;
         this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.context.globalAlpha = 1;
     };
     // used to render a piece for display only (next piece queue, held piece)
     Tetris.renderCosmeticPiece = function (pieceType, canvas, blockSize, gridSize, color) {
@@ -948,12 +993,6 @@ var Tetris = /** @class */ (function () {
             context.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
         }
     };
-    Tetris.prototype.log = function (message) {
-        if (this.diagMessage.length >= this.logLength) {
-            this.diagMessage.pop();
-        }
-        this.diagMessage.unshift(message);
-    };
     Tetris.getPieceColorIndex = function (piece) {
         if (piece == null) {
             return 0;
@@ -978,4 +1017,3 @@ var game = new Tetris();
 document.getElementById("start-button").addEventListener("click", function () { return game.start(); });
 document.getElementById("stop-button").addEventListener("click", function () { return game.stop(); });
 document.getElementById("build-timestamp").innerText = document.lastModified;
-console.log(game);
