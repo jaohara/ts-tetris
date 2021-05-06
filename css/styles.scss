@@ -55,11 +55,11 @@ p#game-buttons {
 div#content-wrapper{
   // background: #3498db;
   align-items: stretch;
-  background: linear-gradient(2deg, $mint 0%, $blue 100%);
+  //background: linear-gradient(2deg, $mint 0%, $blue 100%);
   display: flex;
   justify-content: space-between;
-  margin: 75px auto;
-  width: 75%;
+  margin: 25px auto;
+  width: 90%;
 
   header, #main-content {
     background: $grey-darkest;

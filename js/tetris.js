@@ -406,8 +406,6 @@ var Tetris = /** @class */ (function () {
             "T": HTMLCanvasElement,
             "Z": HTMLCanvasElement
         };
-        // game settings
-        this.blockSize = 24;
         this.frameRate = 60;
         this.gameSpeed = [
             0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0879,
@@ -420,6 +418,7 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
+        this.debugControls = ["0"];
         // game state
         this.activePiece = null;
         this.autorepeatFrameLock = 0;
@@ -443,6 +442,8 @@ var Tetris = /** @class */ (function () {
         this.bgColor = '#1b1d24';
         this.bgGradientColor1 = { 'h': 240, 's': 69, 'l': 13 };
         this.bgGradientColor2 = { 'h': 216, 's': 84, 'l': 36 };
+        this.bgGradientColorString1 = 'hsl(240, 69%, 13%)';
+        this.bgGradientColorString2 = 'hsl(216, 84%, 36%)';
         this.bgGradientTarget1 = 240;
         this.bgGradientTarget2 = 216;
         this.bgGradientTimer = null;
@@ -460,8 +461,11 @@ var Tetris = /** @class */ (function () {
             '#1b1d24', '#3498db', '#273ac5', '#e97e03',
             '#edcc30', '#13be3d', '#b84cd8', '#ec334d'
         ];
+        // graphics options
+        this.noBackground = false;
         this.canvas = document.getElementById("main-canvas");
         this.context = this.canvas.getContext('2d');
+        this.blockSize = Math.floor(this.canvas.height / 25);
         this.well = new Well(this);
         for (var _i = 0, _a = Tetromino.pieceTypes; _i < _a.length; _i++) {
             var pieceType = _a[_i];
@@ -648,6 +652,11 @@ var Tetris = /** @class */ (function () {
                 }
             }
         }
+        else if (game.debugControls.includes(input)) {
+            if (input === "0") {
+                game.noBackground = !game.noBackground;
+            }
+        }
     };
     Tetris.pollGamepad = function () {
         if (game.gamepadConnected && game.gamepad !== null) {
@@ -738,15 +747,18 @@ var Tetris = /** @class */ (function () {
     };
     Tetris.prototype.holdPiece = function () {
         if (!this.holdLock) {
+            this.spawnLock = true;
             clearInterval(this.activePiece.gravity);
-            var tempPiece = this.activePiece;
+            // did reordering these steps change the lockdelay bug?
             this.activePiece.removeLockDelay();
+            var tempPiece = this.activePiece;
             this.activePiece = this.heldPiece !== null ?
                 new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
             this.ghostPiece = this.activePiece !== null ?
                 this.activePiece.getGhost() : null;
             this.heldPiece = tempPiece;
             this.holdLock = true;
+            this.spawnLock = false;
         }
     };
     Tetris.prototype.setSpawnLock = function (state) {
@@ -762,8 +774,10 @@ var Tetris = /** @class */ (function () {
     // DRAW METHODS
     Tetris.prototype.draw = function () {
         // dynamic numbers used for ambient animations
-        var sinOffset = 500 * Math.sin(Date.now() / 50000);
-        var cosOffset = 500 * Math.cos(Date.now() / 50000);
+        //let sinOffset = 500*Math.sin(Date.now()/50000);
+        //let cosOffset = 500*Math.cos(Date.now()/50000);
+        var sinOffset = 500 * Math.sin(this.previousLoopTime / 50000);
+        var cosOffset = 500 * Math.cos(this.previousLoopTime / 50000);
         // draw BG
         this.drawBackground(sinOffset, cosOffset);
         // draw Grid
@@ -776,33 +790,39 @@ var Tetris = /** @class */ (function () {
         this.drawPause();
     };
     Tetris.prototype.drawBackground = function (sinOffset, cosOffset) {
-        // I don't usually like getting this gross with my variable names but this was becoming nuts
-        var w = this.canvas.width;
-        var h = this.canvas.height;
-        // draw base color
-        this.context.fillStyle = this.bgColor;
-        this.context.fillRect(0, 0, w, h);
-        // draw bg gradient
-        var bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0, 200 + w / 8 + cosOffset / 10, h);
-        //bgGradient.addColorStop(1, '#111112');
-        bgGradient.addColorStop(1, "hsl(" + this.bgGradientColor1.h + ", " + this.bgGradientColor1.s + "%, " + this.bgGradientColor1.l + "%)");
-        bgGradient.addColorStop(0, "hsl(" + this.bgGradientColor2.h + ", " + this.bgGradientColor2.s + "%, " + this.bgGradientColor2.l + "%)");
-        this.context.fillStyle = bgGradient;
-        this.context.fillRect(0, 0, w, h);
-        // create bezier gradient
-        var bezierGradient = this.context.createLinearGradient(0, 0, w, h);
-        bezierGradient.addColorStop(0, this.bezierColor1);
-        bezierGradient.addColorStop(1, this.bezierColor2);
-        this.context.strokeStyle = bezierGradient;
-        this.context.globalCompositeOperation = "overlay";
-        // create bezier curves
-        for (var x = 0; x < 60; x++) {
-            this.context.beginPath();
-            this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
-            this.context.bezierCurveTo(w / 4 - (x * 10), h / 3, h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500), w + 50, h / 2 + cosOffset);
-            this.context.stroke();
+        if (!this.noBackground) {
+            // I don't usually like getting this gross with my variable names but this was becoming nuts
+            var w = this.canvas.width;
+            var h = this.canvas.height;
+            // draw base color
+            this.context.fillStyle = this.bgColor;
+            this.context.fillRect(0, 0, w, h);
+            // draw bg gradient
+            var bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0, 200 + w / 8 + cosOffset / 10, h);
+            //bgGradient.addColorStop(1, '#111112');
+            bgGradient.addColorStop(1, "hsl(" + this.bgGradientColor1.h + ", " + this.bgGradientColor1.s + "%, " + this.bgGradientColor1.l + "%)");
+            bgGradient.addColorStop(0, "hsl(" + this.bgGradientColor2.h + ", " + this.bgGradientColor2.s + "%, " + this.bgGradientColor2.l + "%)");
+            this.context.fillStyle = bgGradient;
+            this.context.fillRect(0, 0, w, h);
+            // create bezier gradient
+            var bezierGradient = this.context.createLinearGradient(0, 0, w, h);
+            bezierGradient.addColorStop(0, this.bezierColor1);
+            bezierGradient.addColorStop(1, this.bezierColor2);
+            this.context.strokeStyle = bezierGradient;
+            this.context.globalCompositeOperation = "overlay";
+            // create bezier curves
+            for (var x = 0; x < 60; x++) {
+                this.context.beginPath();
+                this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
+                this.context.bezierCurveTo(w / 4 - (x * 10), h / 3, h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500), w + 50, h / 2 + cosOffset);
+                this.context.stroke();
+            }
+            this.context.globalCompositeOperation = "source-over";
         }
-        this.context.globalCompositeOperation = "source-over";
+        else {
+            this.context.fillStyle = "#000";
+            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
     };
     Tetris.prototype.drawGrid = function () {
         var grid = __spreadArray([], this.well.getGrid());
@@ -833,15 +853,14 @@ var Tetris = /** @class */ (function () {
                 var baseColor = void 0;
                 var colorOpacity = 1;
                 var drawGradient = true;
-                if (piecePos.includes(row + ":" + col)) { // color from piece
+                if (piecePos !== null && piecePos.includes(row + ":" + col)) { // color from piece
                     baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
                     pieceLocking = this.activePiece.getLockPercentage() > 0;
                 }
-                else if (ghostPos.includes(row + ":" + col)) { // color from ghost piece
+                else if (ghostPos !== null && ghostPos.includes(row + ":" + col)) { // color from ghost piece
                     // first draw empty cell for proper transparency
                     this.context.fillStyle = this.colorArray[0];
                     this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-                    //
                     baseColor = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
                     colorOpacity = this.ghostPieceOpacity / 255;
                 }
@@ -882,7 +901,7 @@ var Tetris = /** @class */ (function () {
         if (!this.gameOver) {
             this.context.fillStyle = this.fontColor;
             this.context.font = "1.0em \"" + this.gameFont + "\"";
-            var yOffset = 3 * Math.cos(Date.now() / 600);
+            var yOffset = Math.floor(3 * Math.cos(Date.now() / 600));
             // UI boxes
             // This box positioning is a little wonky
             // right box
@@ -929,7 +948,7 @@ var Tetris = /** @class */ (function () {
             var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
             var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
             // render twice, once with background
-            for (var i = 0; i < 2; i++) {
+            for (var i = 1; i < 2; i++) {
                 if (i == 0) {
                     this.context.fillStyle = this.bgColor;
                     this.context.filter = 'blur(2px)';
@@ -961,7 +980,7 @@ var Tetris = /** @class */ (function () {
                 var yOffset_1 = 2 * Math.cos(Date.now() / 400);
                 var heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
                 var heldPieceX = ulBoxX + (ulBoxWidth / 2 - heldPieceCanvas.width / 2);
-                var heldPieceY = ((3 * rBoxHeight) / 12) + yOffset_1;
+                var heldPieceY = Math.floor(((3 * rBoxHeight) / 12) + yOffset_1);
                 this.context.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
                 //this.context.restore();
             }
@@ -1071,7 +1090,10 @@ var Tetris = /** @class */ (function () {
     };
     return Tetris;
 }());
-var game = new Tetris();
-document.getElementById("start-button").addEventListener("click", function () { return game.start(); });
-document.getElementById("stop-button").addEventListener("click", function () { return game.stop(); });
-document.getElementById("build-timestamp").innerText = document.lastModified;
+var game;
+window.addEventListener('load', function (event) {
+    game = new Tetris();
+    document.getElementById("start-button").addEventListener("click", function () { return game.start(); });
+    document.getElementById("stop-button").addEventListener("click", function () { return game.stop(); });
+    document.getElementById("build-timestamp").innerText = document.lastModified;
+});

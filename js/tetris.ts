@@ -480,7 +480,8 @@ class Tetris {
     }
 
     // game settings
-    private readonly blockSize = 24;
+    // private readonly blockSize = 24;
+    private readonly blockSize: number;
     private readonly frameRate = 60;
     private readonly gameSpeed = [
         0, 0.01667, 0.021217, 0.026977, 0.035256, 0.04693, 0.06361, 0.0879,
@@ -494,6 +495,8 @@ class Tetris {
         "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
         "e", "n", "Enter"
     ];
+
+    private readonly debugControls = ["0"];
 
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these
@@ -544,6 +547,8 @@ class Tetris {
     private readonly bgColor        = '#1b1d24';
     private bgGradientColor1        = {'h': 240, 's': 69, 'l': 13};
     private bgGradientColor2        = {'h': 216, 's': 84, 'l': 36};
+    private bgGradientColorString1  = 'hsl(240, 69%, 13%)';
+    private bgGradientColorString2  = 'hsl(216, 84%, 36%)';
     private bgGradientTarget1       = 240;
     private bgGradientTarget2       = 216;
     private bgGradientTimer: ReturnType<typeof setInterval> = null;
@@ -562,10 +567,15 @@ class Tetris {
         '#1b1d24', '#3498db', '#273ac5', '#e97e03',
         '#edcc30', '#13be3d', '#b84cd8', '#ec334d'];
 
+    // graphics options
+    private noBackground: boolean = false;
+
     constructor() {
         this.canvas     = document.getElementById("main-canvas") as HTMLCanvasElement;
         this.context    = this.canvas.getContext('2d');
+        this.blockSize  = Math.floor(this.canvas.height / 25);
         this.well       = new Well(this);
+
 
         for (let pieceType of Tetromino.pieceTypes){
             this.renderedPieces[pieceType] = document.createElement("canvas");
@@ -768,6 +778,10 @@ class Tetris {
                     game.newGame();
                 }
             }
+        } else if (game.debugControls.includes(input)){
+            if (input === "0") {
+                game.noBackground = !game.noBackground;
+            }
         }
     }
 
@@ -873,11 +887,12 @@ class Tetris {
 
     holdPiece() {
         if (!this.holdLock) {
+            this.spawnLock = true;
             clearInterval(this.activePiece.gravity);
 
-            let tempPiece = this.activePiece;
-
+            // did reordering these steps change the lockdelay bug?
             this.activePiece.removeLockDelay();
+            let tempPiece = this.activePiece;
 
             this.activePiece = this.heldPiece !== null ?
                 new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
@@ -886,6 +901,7 @@ class Tetris {
 
             this.heldPiece = tempPiece;
             this.holdLock = true;
+            this.spawnLock = false;
         }
     }
 
@@ -906,8 +922,10 @@ class Tetris {
 
     private draw(): void {
         // dynamic numbers used for ambient animations
-        let sinOffset = 500*Math.sin(Date.now()/50000);
-        let cosOffset = 500*Math.cos(Date.now()/50000);
+        //let sinOffset = 500*Math.sin(Date.now()/50000);
+        //let cosOffset = 500*Math.cos(Date.now()/50000);
+        let sinOffset = 500*Math.sin(this.previousLoopTime/50000);
+        let cosOffset = 500*Math.cos(this.previousLoopTime/50000);
 
         // draw BG
         this.drawBackground(sinOffset, cosOffset);
@@ -925,44 +943,50 @@ class Tetris {
     }
 
     private drawBackground(sinOffset: number, cosOffset: number) {
+        if (!this.noBackground) {
 
-        // I don't usually like getting this gross with my variable names but this was becoming nuts
-        let w = this.canvas.width;
-        let h = this.canvas.height;
+            // I don't usually like getting this gross with my variable names but this was becoming nuts
+            let w = this.canvas.width;
+            let h = this.canvas.height;
 
-        // draw base color
-        this.context.fillStyle = this.bgColor;
-        this.context.fillRect(0,0, w, h);
+            // draw base color
+            this.context.fillStyle = this.bgColor;
+            this.context.fillRect(0, 0, w, h);
 
-        // draw bg gradient
-        let bgGradient = this.context.createLinearGradient(w+200 - w/8 + sinOffset/10,0,
-            200 + w/8 + cosOffset/10,h);
-        //bgGradient.addColorStop(1, '#111112');
-        bgGradient.addColorStop(1,
-            `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
-        bgGradient.addColorStop(0,
-            `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
-        this.context.fillStyle = bgGradient;
-        this.context.fillRect(0, 0, w, h);
+            // draw bg gradient
+            let bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0,
+                200 + w / 8 + cosOffset / 10, h);
+            //bgGradient.addColorStop(1, '#111112');
+            bgGradient.addColorStop(1,
+                `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
+            bgGradient.addColorStop(0,
+                `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
+            this.context.fillStyle = bgGradient;
+            this.context.fillRect(0, 0, w, h);
 
-        // create bezier gradient
-        let bezierGradient = this.context.createLinearGradient(0,0, w, h);
-        bezierGradient.addColorStop(0,this.bezierColor1);
-        bezierGradient.addColorStop(1,this.bezierColor2);
-        this.context.strokeStyle = bezierGradient;
-        this.context.globalCompositeOperation = "overlay";
+            // create bezier gradient
+            let bezierGradient = this.context.createLinearGradient(0, 0, w, h);
+            bezierGradient.addColorStop(0, this.bezierColor1);
+            bezierGradient.addColorStop(1, this.bezierColor2);
+            this.context.strokeStyle = bezierGradient;
+            this.context.globalCompositeOperation = "overlay";
 
-        // create bezier curves
-        for (let x = 0; x < 60; x++){
-            this.context.beginPath();
-            this.context.moveTo(-300 + cosOffset/30, w/3 + sinOffset);
-            this.context.bezierCurveTo(w/4 - (x*10), h/3,
-                h * 2/3 + (x*40), (x*40)+(cosOffset/500),
-                w+50, h/2 + cosOffset);
-            this.context.stroke();
+            // create bezier curves
+            for (let x = 0; x < 60; x++) {
+                this.context.beginPath();
+                this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
+                this.context.bezierCurveTo(w / 4 - (x * 10), h / 3,
+                    h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500),
+                    w + 50, h / 2 + cosOffset);
+                this.context.stroke();
+            }
+
+            this.context.globalCompositeOperation = "source-over";
         }
-
-        this.context.globalCompositeOperation = "source-over";
+        else {
+            this.context.fillStyle = "#000";
+            this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+        }
     }
 
     private drawGrid(){
@@ -1004,16 +1028,15 @@ class Tetris {
                 let colorOpacity = 1;
                 let drawGradient = true;
 
-                if (piecePos.includes(`${row}:${col}`)){        // color from piece
+                if (piecePos !== null && piecePos.includes(`${row}:${col}`)){        // color from piece
                     baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
                     pieceLocking = this.activePiece.getLockPercentage() > 0;
                 }
-                else if (ghostPos.includes(`${row}:${col}`)){   // color from ghost piece
+                else if (ghostPos !== null && ghostPos.includes(`${row}:${col}`)){   // color from ghost piece
                     // first draw empty cell for proper transparency
                     this.context.fillStyle = this.colorArray[0];
                     this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
 
-                    //
                     baseColor = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
                     colorOpacity = this.ghostPieceOpacity / 255;
                 } else {                                        // color from grid
@@ -1067,7 +1090,7 @@ class Tetris {
             this.context.fillStyle = this.fontColor;
             this.context.font = `1.0em "${this.gameFont}"`;
 
-            let yOffset = 3 * Math.cos(Date.now()/600);
+            let yOffset = Math.floor(3 * Math.cos(Date.now()/600));
 
             // UI boxes
 
@@ -1128,7 +1151,7 @@ class Tetris {
 
 
             // render twice, once with background
-            for(let i = 0; i < 2; i++) {
+            for(let i = 1; i < 2; i++) {
                 if (i == 0){
                     this.context.fillStyle = this.bgColor;
                     this.context.filter = 'blur(2px)';
@@ -1167,7 +1190,7 @@ class Tetris {
                 let yOffset = 2 * Math.cos(Date.now()/400);
                 let heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
                 let heldPieceX = ulBoxX + (ulBoxWidth/2 - heldPieceCanvas.width/2);
-                let heldPieceY = ((3 * rBoxHeight)/12) + yOffset;
+                let heldPieceY = Math.floor(((3 * rBoxHeight)/12) + yOffset);
                 this.context.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
 
                 //this.context.restore();
@@ -1299,11 +1322,11 @@ class Tetris {
     }
 }
 
-let game = new Tetris();
+let game: Tetris;
 
-document.getElementById("start-button").addEventListener("click",() => game.start());
-
-document.getElementById("stop-button").addEventListener("click",() => game.stop());
-
-document.getElementById("build-timestamp").innerText = document.lastModified;
-
+window.addEventListener('load', (event) => {
+    game = new Tetris();
+    document.getElementById("start-button").addEventListener("click",() => game.start());
+    document.getElementById("stop-button").addEventListener("click",() => game.stop());
+    document.getElementById("build-timestamp").innerText = document.lastModified;
+});

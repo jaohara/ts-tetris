@@ -37,11 +37,10 @@ p#game-buttons {
 
 div#content-wrapper {
   align-items: stretch;
-  background: linear-gradient(2deg, #68e4b6 0%, #3498db 100%);
   display: flex;
   justify-content: space-between;
-  margin: 75px auto;
-  width: 75%;
+  margin: 25px auto;
+  width: 90%;
 }
 div#content-wrapper header, div#content-wrapper #main-content {
   background: #1b1d24;
