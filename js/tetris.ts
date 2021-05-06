@@ -469,6 +469,17 @@ class Tetris {
     private gamepad: Gamepad = null;
     private gamepadLastFrame: Gamepad = null;
     private readonly well: Well;
+
+    // Objects to store individual pre-rendered minos (blocks) and full pre-rendered pieces
+    private renderedMinos: Object = {
+        "I": HTMLCanvasElement,
+        "J": HTMLCanvasElement,
+        "L": HTMLCanvasElement,
+        "O": HTMLCanvasElement,
+        "S": HTMLCanvasElement,
+        "T": HTMLCanvasElement,
+        "Z": HTMLCanvasElement
+    };
     private renderedPieces: Object = {
         "I": HTMLCanvasElement,
         "J": HTMLCanvasElement,
@@ -477,7 +488,7 @@ class Tetris {
         "S": HTMLCanvasElement,
         "T": HTMLCanvasElement,
         "Z": HTMLCanvasElement
-    }
+    };
 
     // game settings
     // private readonly blockSize = 24;
@@ -577,7 +588,15 @@ class Tetris {
         this.well       = new Well(this);
 
 
+        // pre-render minos and pieces
         for (let pieceType of Tetromino.pieceTypes){
+            this.renderedMinos[pieceType] = document.createElement("canvas");
+            this.renderedMinos[pieceType].height = this.blockSize;
+            this.renderedMinos[pieceType].width = this.blockSize;
+
+            Tetris.renderMinos(pieceType, this.renderedMinos[pieceType], this.blockSize,
+                this.colorArray[Tetromino.pieceTypes.indexOf(pieceType) + 1]);
+
             this.renderedPieces[pieceType] = document.createElement("canvas");
 
             if (pieceType === "I"){
@@ -594,7 +613,7 @@ class Tetris {
             }
 
             Tetris.renderCosmeticPiece(pieceType, this.renderedPieces[pieceType],
-                this.blockSize, this.gridSize, this.colorArray[Tetromino.pieceTypes.indexOf(pieceType)+1]);
+                this.renderedMinos[pieceType], this.blockSize, this.gridSize);
         }
 
         // todo: get high score from wherever it has been saved?
@@ -1016,62 +1035,53 @@ class Tetris {
         let ghostPos = this.ghostPiece === null ? null : this.ghostPiece.getPos();
 
         // fill the blocks, rendering the active piece/that creepy ghost piece
-        for (let row = 0; row < gridHeight; row++){
+        for (let row = 0; row < gridHeight; row++) {
             for (let col = 0; col < gridWidth; col++) {
                 let blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
                 let blockY = gridY + this.gridSize + (row * (this.blockSize + this.gridSize));
 
+                let colorOpacity = 1;
+                let mino: HTMLCanvasElement = null;
                 let pieceLocking = false;
 
-                // piece rendering - should this be another draw method?
-                let baseColor: string;
-                let colorOpacity = 1;
-                let drawGradient = true;
-
-                if (piecePos !== null && piecePos.includes(`${row}:${col}`)){        // color from piece
-                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
-                    pieceLocking = this.activePiece.getLockPercentage() > 0;
+                if (piecePos !== null && piecePos.includes(`${row}:${col}`) ||
+                    ghostPos !== null && ghostPos.includes(`${row}:${col}`)) {
+                    if (ghostPos.includes(`${row}:${col}`)) {
+                        this.context.fillStyle = this.colorArray[0];
+                        this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                        colorOpacity = this.ghostPieceOpacity / 255;
+                        mino = this.renderedMinos[this.ghostPiece.pieceType];
+                    }
+                    else if (piecePos.includes(`${row}:${col}`)) {
+                        pieceLocking = piecePos.includes(`${row}:${col}`) ? this.activePiece.getLockPercentage() > 0 : false;
+                        mino = this.renderedMinos[this.activePiece.pieceType];
+                    }
                 }
-                else if (ghostPos !== null && ghostPos.includes(`${row}:${col}`)){   // color from ghost piece
-                    // first draw empty cell for proper transparency
-                    this.context.fillStyle = this.colorArray[0];
-                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-
-                    baseColor = this.colorArray[Tetris.getPieceColorIndex(this.ghostPiece)];
-                    colorOpacity = this.ghostPieceOpacity / 255;
-                } else {                                        // color from grid
-                    baseColor = this.colorArray[grid[row][col]];
-                    drawGradient = grid[row][col] !== 0;
-
-                    if (grid[row][col] === 0){
+                else {
+                    if (grid[row][col] === 0) {
                         colorOpacity = .8;
+                    }
+                    else {
+                        mino = this.renderedMinos[Tetromino.pieceTypes[grid[row][col] - 1]];
                     }
                 }
 
                 this.context.globalAlpha = colorOpacity;
-                this.context.fillStyle = baseColor;
-                this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
 
-                if (drawGradient) {
-                    let colorGradient =
-                        this.context.createLinearGradient(blockX+4, blockY+4,
-                            blockX+this.blockSize-4, blockY+this.blockSize-4);
-
-
-                    // this is the same in renderCosmeticPiece() and I don't like it, but I don't
-                    // know how I'd make it universal
-                    colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
-                    colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
-                    colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
-
-                    this.context.fillStyle = colorGradient;
-                    this.context.fillRect(blockX + 1, blockY + 1, this.blockSize - 2, this.blockSize - 2);
+                // render the piece or background
+                if (mino !== null) {
+                    this.context.drawImage(mino, blockX-1, blockY);
+                }
+                else {
+                    // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
+                    this.context.fillStyle = this.colorArray[0];
+                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 }
 
                 this.context.globalAlpha = 1;
 
                 // piece lock animation
-                if (pieceLocking){
+                if (pieceLocking) {
                     this.context.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage()/100})`;
                     this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 }
@@ -1151,6 +1161,7 @@ class Tetris {
 
 
             // render twice, once with background
+            // TODO: Remove double render code? Seems to give bad performance for minimal gain
             for(let i = 1; i < 2; i++) {
                 if (i == 0){
                     this.context.fillStyle = this.bgColor;
@@ -1208,6 +1219,18 @@ class Tetris {
                     upcomingPieceY + yOffset);
                 upcomingPieceY += rBoxHeight / 6;
             }
+
+
+            // DEBUG
+            // test render the minos
+            if (this.renderedMinos !== null) {
+                let yPos = 0;
+                for (let type of Tetromino.pieceTypes) {
+                    let mino = this.renderedMinos[type];
+                    this.context.drawImage(mino, 0, yPos);
+                    yPos += mino.height;
+                }
+            }
         }
         else if (this.titleScreen) {
             this.drawTitle();
@@ -1264,9 +1287,30 @@ class Tetris {
         this.context.globalAlpha = 1;
     }
 
+    private static renderMinos(pieceType: string, canvas: HTMLCanvasElement,
+                               blockSize: number, color: string): void {
+        if (!Tetromino.pieceTypes.includes(pieceType)){
+            throw new Error("renderMinos was not given a valid piece type!");
+        }
+
+        let context = canvas.getContext('2d');
+
+        context.fillStyle = color;
+        context.fillRect(0, 0, blockSize, blockSize);
+
+        let colorGradient = context.createLinearGradient(2, 2,blockSize - 4,blockSize - 4);
+
+        colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
+        colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
+        colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
+
+        context.fillStyle = colorGradient;
+        context.fillRect(1, 1, blockSize - 2, blockSize - 2);
+    }
+
     // used to render a piece for display only (next piece queue, held piece)
-    private static renderCosmeticPiece(pieceType: string, canvas: HTMLCanvasElement,
-                                blockSize: number, gridSize: number, color: string):void {
+    private static renderCosmeticPiece(pieceType: string, canvas: HTMLCanvasElement, mino: HTMLCanvasElement,
+                                       blockSize: number, gridSize: number):void {
         if (!Tetromino.pieceTypes.includes(pieceType)){
             throw new Error("renderCosmeticPiece was not given a valid piece type!");
         }
@@ -1280,20 +1324,23 @@ class Tetris {
             let xPos = gridSize + ((blockCoords[1] - 3) * (blockSize + gridSize));
             let yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
 
+            context.drawImage(mino, xPos, yPos);
+
+            // old way
+            /*
             context.fillStyle = color;
             context.fillRect(xPos, yPos, blockSize, blockSize);
 
             let colorGradient = context.createLinearGradient(xPos + 4, yPos + 4,
                 xPos + blockSize - 4, yPos + blockSize - 4);
 
-            // this is the same in renderCosmeticPiece() and I don't like it, but I don't
-            // know how I'd make it universal
             colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
             colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
             colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
 
             context.fillStyle = colorGradient;
             context.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
+             */
         }
     }
 
