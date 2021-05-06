@@ -507,7 +507,7 @@ class Tetris {
         "e", "n", "Enter"
     ];
 
-    private readonly debugControls = ["0", "9"];
+    private readonly debugControls = ["0", "9", "8", "7"];
 
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these
@@ -578,9 +578,11 @@ class Tetris {
         '#1b1d24', '#3498db', '#273ac5', '#e97e03',
         '#edcc30', '#13be3d', '#b84cd8', '#ec334d'];
 
-    // graphics options
+    // graphics/debug options
+    private noGravity: boolean = false;
     private noBackground: boolean = false;
-    private simpleBackground: boolean = false;
+    private simpleBackground: boolean = true;
+    private testRenderMinos: boolean = false;
 
     constructor() {
         this.canvas     = document.getElementById("main-canvas") as HTMLCanvasElement;
@@ -684,7 +686,7 @@ class Tetris {
                     // give the active piece gravity if it doesn't have it
                     if (this.activePiece.gravity === null){
                         this.activePiece.gravity = setInterval(() => {
-                            if (!this.paused) {
+                            if (!this.paused && !this.noGravity) {
                                 if (!this.activePiece.moveLock) {
                                     let falling = this.activePiece.move("gravity");
 
@@ -804,6 +806,12 @@ class Tetris {
             }
             else if (input === "9") {
                 game.simpleBackground = !game.simpleBackground;
+            }
+            else if (input === "8"){
+                game.testRenderMinos = !game.testRenderMinos;
+            }
+            else if (input === "7"){
+                game.noGravity = !game.noGravity;
             }
         }
     }
@@ -1091,7 +1099,7 @@ class Tetris {
 
                 // render the piece or background
                 if (mino !== null) {
-                    this.context.drawImage(mino, blockX-1, blockY);
+                    this.context.drawImage(mino, blockX+1, blockY+1);
                 }
                 else {
                     // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
@@ -1239,7 +1247,7 @@ class Tetris {
 
             // DEBUG
             // test render the minos
-            if (this.renderedMinos !== null) {
+            if (this.renderedMinos !== null && this.testRenderMinos) {
                 let yPos = 0;
                 for (let type of Tetromino.pieceTypes) {
                     let mino = this.renderedMinos[type];

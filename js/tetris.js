@@ -428,7 +428,7 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
-        this.debugControls = ["0", "9"];
+        this.debugControls = ["0", "9", "8", "7"];
         // game state
         this.activePiece = null;
         this.autorepeatFrameLock = 0;
@@ -471,9 +471,11 @@ var Tetris = /** @class */ (function () {
             '#1b1d24', '#3498db', '#273ac5', '#e97e03',
             '#edcc30', '#13be3d', '#b84cd8', '#ec334d'
         ];
-        // graphics options
+        // graphics/debug options
+        this.noGravity = false;
         this.noBackground = false;
-        this.simpleBackground = false;
+        this.simpleBackground = true;
+        this.testRenderMinos = false;
         this.canvas = document.getElementById("main-canvas");
         this.context = this.canvas.getContext('2d');
         this.blockSize = Math.floor(this.canvas.height / 25);
@@ -555,7 +557,7 @@ var Tetris = /** @class */ (function () {
                     // give the active piece gravity if it doesn't have it
                     if (_this.activePiece.gravity === null) {
                         _this.activePiece.gravity = setInterval(function () {
-                            if (!_this.paused) {
+                            if (!_this.paused && !_this.noGravity) {
                                 if (!_this.activePiece.moveLock) {
                                     var falling = _this.activePiece.move("gravity");
                                     if (!falling) {
@@ -674,6 +676,12 @@ var Tetris = /** @class */ (function () {
             }
             else if (input === "9") {
                 game.simpleBackground = !game.simpleBackground;
+            }
+            else if (input === "8") {
+                game.testRenderMinos = !game.testRenderMinos;
+            }
+            else if (input === "7") {
+                game.noGravity = !game.noGravity;
             }
         }
     };
@@ -907,7 +915,7 @@ var Tetris = /** @class */ (function () {
                 this.context.globalAlpha = colorOpacity;
                 // render the piece or background
                 if (mino !== null) {
-                    this.context.drawImage(mino, blockX - 1, blockY);
+                    this.context.drawImage(mino, blockX + 1, blockY + 1);
                 }
                 else {
                     // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
@@ -1024,7 +1032,7 @@ var Tetris = /** @class */ (function () {
             }
             // DEBUG
             // test render the minos
-            if (this.renderedMinos !== null) {
+            if (this.renderedMinos !== null && this.testRenderMinos) {
                 var yPos = 0;
                 for (var _b = 0, _c = Tetromino.pieceTypes; _b < _c.length; _b++) {
                     var type = _c[_b];
