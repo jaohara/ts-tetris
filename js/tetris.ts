@@ -507,7 +507,7 @@ class Tetris {
         "e", "n", "Enter"
     ];
 
-    private readonly debugControls = ["0"];
+    private readonly debugControls = ["0", "9"];
 
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these
@@ -580,6 +580,7 @@ class Tetris {
 
     // graphics options
     private noBackground: boolean = false;
+    private simpleBackground: boolean = false;
 
     constructor() {
         this.canvas     = document.getElementById("main-canvas") as HTMLCanvasElement;
@@ -801,6 +802,9 @@ class Tetris {
             if (input === "0") {
                 game.noBackground = !game.noBackground;
             }
+            else if (input === "9") {
+                game.simpleBackground = !game.simpleBackground;
+            }
         }
     }
 
@@ -893,6 +897,11 @@ class Tetris {
                     this.bgGradientTimer = null;
                 }
 
+                this.bgGradientColorString1 =
+                    `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`;
+                this.bgGradientColorString2 =
+                    `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`;
+
             }, this.updateFrequency * 4);
         }
     }
@@ -963,44 +972,56 @@ class Tetris {
 
     private drawBackground(sinOffset: number, cosOffset: number) {
         if (!this.noBackground) {
+            if (this.simpleBackground) {
+                let bgGradient = this.context.createLinearGradient(0,0,0,this.canvas.height);
 
-            // I don't usually like getting this gross with my variable names but this was becoming nuts
-            let w = this.canvas.width;
-            let h = this.canvas.height;
+                bgGradient.addColorStop(1, this.bgGradientColorString1);
+                bgGradient.addColorStop(0, this.bgGradientColorString2);
 
-            // draw base color
-            this.context.fillStyle = this.bgColor;
-            this.context.fillRect(0, 0, w, h);
+                this.context.fillStyle = bgGradient;
 
-            // draw bg gradient
-            let bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0,
-                200 + w / 8 + cosOffset / 10, h);
-            //bgGradient.addColorStop(1, '#111112');
-            bgGradient.addColorStop(1,
-                `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
-            bgGradient.addColorStop(0,
-                `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
-            this.context.fillStyle = bgGradient;
-            this.context.fillRect(0, 0, w, h);
-
-            // create bezier gradient
-            let bezierGradient = this.context.createLinearGradient(0, 0, w, h);
-            bezierGradient.addColorStop(0, this.bezierColor1);
-            bezierGradient.addColorStop(1, this.bezierColor2);
-            this.context.strokeStyle = bezierGradient;
-            this.context.globalCompositeOperation = "overlay";
-
-            // create bezier curves
-            for (let x = 0; x < 60; x++) {
-                this.context.beginPath();
-                this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
-                this.context.bezierCurveTo(w / 4 - (x * 10), h / 3,
-                    h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500),
-                    w + 50, h / 2 + cosOffset);
-                this.context.stroke();
+                this.context.fillRect(0,0, this.canvas.width, this.canvas.height);
             }
+            else {
 
-            this.context.globalCompositeOperation = "source-over";
+                // I don't usually like getting this gross with my variable names but this was becoming nuts
+                let w = this.canvas.width;
+                let h = this.canvas.height;
+
+                // draw base color
+                this.context.fillStyle = this.bgColor;
+                this.context.fillRect(0, 0, w, h);
+
+                // draw bg gradient
+                let bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0,
+                    200 + w / 8 + cosOffset / 10, h);
+                //bgGradient.addColorStop(1, '#111112');
+                bgGradient.addColorStop(1,
+                    `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
+                bgGradient.addColorStop(0,
+                    `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
+                this.context.fillStyle = bgGradient;
+                this.context.fillRect(0, 0, w, h);
+
+                // create bezier gradient
+                let bezierGradient = this.context.createLinearGradient(0, 0, w, h);
+                bezierGradient.addColorStop(0, this.bezierColor1);
+                bezierGradient.addColorStop(1, this.bezierColor2);
+                this.context.strokeStyle = bezierGradient;
+                this.context.globalCompositeOperation = "overlay";
+
+                // create bezier curves
+                for (let x = 0; x < 60; x++) {
+                    this.context.beginPath();
+                    this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
+                    this.context.bezierCurveTo(w / 4 - (x * 10), h / 3,
+                        h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500),
+                        w + 50, h / 2 + cosOffset);
+                    this.context.stroke();
+                }
+
+                this.context.globalCompositeOperation = "source-over";
+            }
         }
         else {
             this.context.fillStyle = "#000";
@@ -1046,15 +1067,15 @@ class Tetris {
 
                 if (piecePos !== null && piecePos.includes(`${row}:${col}`) ||
                     ghostPos !== null && ghostPos.includes(`${row}:${col}`)) {
-                    if (ghostPos.includes(`${row}:${col}`)) {
+                    if (piecePos.includes(`${row}:${col}`)) {
+                        pieceLocking = piecePos.includes(`${row}:${col}`) ? this.activePiece.getLockPercentage() > 0 : false;
+                        mino = this.renderedMinos[this.activePiece.pieceType];
+                    }
+                    else if (ghostPos.includes(`${row}:${col}`)) {
                         this.context.fillStyle = this.colorArray[0];
                         this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                         colorOpacity = this.ghostPieceOpacity / 255;
                         mino = this.renderedMinos[this.ghostPiece.pieceType];
-                    }
-                    else if (piecePos.includes(`${row}:${col}`)) {
-                        pieceLocking = piecePos.includes(`${row}:${col}`) ? this.activePiece.getLockPercentage() > 0 : false;
-                        mino = this.renderedMinos[this.activePiece.pieceType];
                     }
                 }
                 else {
@@ -1169,7 +1190,6 @@ class Tetris {
                     this.context.globalCompositeOperation = "overlay";
                 }
                 else {
-                    // this.context.fillStyle = this.bezierColor1;
                     this.context.fillStyle =
                         `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l+30}%)`;
                     this.context.filter = 'none';
@@ -1193,8 +1213,6 @@ class Tetris {
                 this.context.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
             }
 
-            // get rotate ready
-
             // render held piece
             if (this.heldPiece !== null){
                 let xOffset = 2 * Math.sin(Date.now()/400);
@@ -1207,7 +1225,6 @@ class Tetris {
                 //this.context.restore();
             }
 
-
             // render upcoming pieces
             let upcomingPieceY = (rBoxHeight / 6) + (rBoxHeight / 12);
 
@@ -1219,7 +1236,6 @@ class Tetris {
                     upcomingPieceY + yOffset);
                 upcomingPieceY += rBoxHeight / 6;
             }
-
 
             // DEBUG
             // test render the minos
@@ -1278,8 +1294,6 @@ class Tetris {
 
     }
 
-    // I think I could make this better, I'm not satisfied as it is
-    // todo: implement fade in with this.pauseOpacity and this.overlayOpacityTimer
     private drawOverlay(){
         this.context.globalAlpha = this.overlayOpacity;
         this.context.fillStyle = this.pauseColor;
