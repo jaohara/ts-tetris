@@ -463,9 +463,9 @@ class Well {
  * Tetris - A class used to represent the game state and pieces that comprise it.
  */
 class Tetris {
-    // canvas and rendering context
+    // canvas and rendering ctx
     private readonly canvas: HTMLCanvasElement;
-    private context: CanvasRenderingContext2D;
+    private ctx: CanvasRenderingContext2D;
     private gamepad: Gamepad = null;
     private gamepadLastFrame: Gamepad = null;
     private readonly well: Well;
@@ -535,7 +535,7 @@ class Tetris {
     private gameLevel: number;
     private ghostPiece: Tetromino = null;
     private heldPiece: Tetromino = null;
-    private highScore: number = 32000;
+    private highScore: number;
     private holdLock: boolean = false;
     private linesCleared: number;
     private paused: boolean;
@@ -556,9 +556,10 @@ class Tetris {
         lt blue, darkblue, orange, yellow, green, purple, red
      */
     private readonly bgColor        = '#1b1d24';
-    private bgGradientColor1        = {'h': 240, 's': 69, 'l': 13};
+    // private bgGradientColor1        = {'h': 240, 's': 69, 'l': 13};
+    private bgGradientColor1        = {'h': 240, 's': 77, 'l': 32};
     private bgGradientColor2        = {'h': 216, 's': 84, 'l': 36};
-    private bgGradientColorString1  = 'hsl(240, 69%, 13%)';
+    private bgGradientColorString1  = 'hsl(240,77%,32%)';
     private bgGradientColorString2  = 'hsl(216, 84%, 36%)';
     private bgGradientTarget1       = 240;
     private bgGradientTarget2       = 216;
@@ -586,9 +587,11 @@ class Tetris {
 
     constructor() {
         this.canvas     = document.getElementById("main-canvas") as HTMLCanvasElement;
-        this.context    = this.canvas.getContext('2d');
+        this.ctx        = this.canvas.getContext('2d');
         this.blockSize  = Math.floor(this.canvas.height / 25);
         this.well       = new Well(this);
+
+        this.ctx.imageSmoothingEnabled = false;
 
 
         // pre-render minos and pieces
@@ -620,6 +623,9 @@ class Tetris {
         }
 
         // todo: get high score from wherever it has been saved?
+        let localHighScore = localStorage.getItem("highScore");
+
+        this.highScore = localHighScore !== null ? parseInt(localHighScore) : 16000;
 
         this.start();
     }
@@ -700,9 +706,12 @@ class Tetris {
                             }
                         }, (this.updateFrequency / this.gameSpeed[this.gameLevel]));
                     }
+
+                    this.updateHighScore();
                 }
                 else if (this.gameOver){
-                    // todo: GAME OVER STATE
+                    // todo: GAME OVER STATE - is this where it's mainly handled?
+                    this.updateHighScore(true);
                     this.drawGameOver();
                 }
                 else if (this.titleScreen) {
@@ -941,17 +950,25 @@ class Tetris {
         }
     }
 
-    setSpawnLock(state: boolean){
+    setSpawnLock(state: boolean) {
         this.spawnLock = state;
     }
 
-    addScore(score: number): void{
+    addScore(score: number): void {
         this.score += score;
         this.highScore = this.score > this.highScore ? this.score : this.highScore;
     }
 
     getLevel(): number{
         return this.gameLevel;
+    }
+
+    private updateHighScore(writeScore: boolean = false): void {
+        this.highScore = this.score > this.highScore ? this.score : this.highScore;
+
+        if (writeScore) {
+            localStorage.setItem("highScore", this.highScore.toString());
+        }
     }
 
     // DRAW METHODS
@@ -981,14 +998,14 @@ class Tetris {
     private drawBackground(sinOffset: number, cosOffset: number) {
         if (!this.noBackground) {
             if (this.simpleBackground) {
-                let bgGradient = this.context.createLinearGradient(0,0,0,this.canvas.height);
+                let bgGradient = this.ctx.createLinearGradient(0,0,0,this.canvas.height);
 
                 bgGradient.addColorStop(1, this.bgGradientColorString1);
                 bgGradient.addColorStop(0, this.bgGradientColorString2);
 
-                this.context.fillStyle = bgGradient;
+                this.ctx.fillStyle = bgGradient;
 
-                this.context.fillRect(0,0, this.canvas.width, this.canvas.height);
+                this.ctx.fillRect(0,0, this.canvas.width, this.canvas.height);
             }
             else {
 
@@ -997,43 +1014,43 @@ class Tetris {
                 let h = this.canvas.height;
 
                 // draw base color
-                this.context.fillStyle = this.bgColor;
-                this.context.fillRect(0, 0, w, h);
+                this.ctx.fillStyle = this.bgColor;
+                this.ctx.fillRect(0, 0, w, h);
 
                 // draw bg gradient
-                let bgGradient = this.context.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0,
+                let bgGradient = this.ctx.createLinearGradient(w + 200 - w / 8 + sinOffset / 10, 0,
                     200 + w / 8 + cosOffset / 10, h);
                 //bgGradient.addColorStop(1, '#111112');
                 bgGradient.addColorStop(1,
                     `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`);
                 bgGradient.addColorStop(0,
                     `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`);
-                this.context.fillStyle = bgGradient;
-                this.context.fillRect(0, 0, w, h);
+                this.ctx.fillStyle = bgGradient;
+                this.ctx.fillRect(0, 0, w, h);
 
                 // create bezier gradient
-                let bezierGradient = this.context.createLinearGradient(0, 0, w, h);
+                let bezierGradient = this.ctx.createLinearGradient(0, 0, w, h);
                 bezierGradient.addColorStop(0, this.bezierColor1);
                 bezierGradient.addColorStop(1, this.bezierColor2);
-                this.context.strokeStyle = bezierGradient;
-                this.context.globalCompositeOperation = "overlay";
+                this.ctx.strokeStyle = bezierGradient;
+                this.ctx.globalCompositeOperation = "overlay";
 
                 // create bezier curves
                 for (let x = 0; x < 60; x++) {
-                    this.context.beginPath();
-                    this.context.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
-                    this.context.bezierCurveTo(w / 4 - (x * 10), h / 3,
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(-300 + cosOffset / 30, w / 3 + sinOffset);
+                    this.ctx.bezierCurveTo(w / 4 - (x * 10), h / 3,
                         h * 2 / 3 + (x * 40), (x * 40) + (cosOffset / 500),
                         w + 50, h / 2 + cosOffset);
-                    this.context.stroke();
+                    this.ctx.stroke();
                 }
 
-                this.context.globalCompositeOperation = "source-over";
+                this.ctx.globalCompositeOperation = "source-over";
             }
         }
         else {
-            this.context.fillStyle = "#000";
-            this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
+            this.ctx.fillStyle = "#000";
+            this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
         }
     }
 
@@ -1045,19 +1062,19 @@ class Tetris {
         let gridPixHeight   = ((this.blockSize+this.gridSize) * gridHeight) + this.gridSize;
 
         // center grid
-        let gridX = this.canvas.width/2 - gridPixWidth/2;
-        let gridY = this.canvas.height/2 - gridPixHeight/2;
+        let gridX = Math.floor(this.canvas.width/2 - gridPixWidth/2);
+        let gridY = Math.floor(this.canvas.height/2 - gridPixHeight/2);
 
-        this.context.fillStyle = this.gridColor;
-        this.context.globalCompositeOperation = "multiply";
-        this.context.filter = 'blur(2px)';
+        this.ctx.fillStyle = this.gridColor;
+        this.ctx.globalCompositeOperation = "multiply";
+        this.ctx.filter = 'blur(2px)';
 
 
         // draw grid bg
-        this.context.fillRect(gridX, gridY, gridPixWidth, gridPixHeight);
+        this.ctx.fillRect(gridX, gridY, gridPixWidth, gridPixHeight);
 
-        this.context.globalCompositeOperation = "source-over";
-        this.context.filter = 'none';
+        this.ctx.globalCompositeOperation = "source-over";
+        this.ctx.filter = 'none';
 
         // get positions of active piece and that freaky ghost piece
         let piecePos = this.activePiece === null ? null : this.activePiece.getPos();
@@ -1080,8 +1097,8 @@ class Tetris {
                         mino = this.renderedMinos[this.activePiece.pieceType];
                     }
                     else if (ghostPos.includes(`${row}:${col}`)) {
-                        this.context.fillStyle = this.colorArray[0];
-                        this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                        this.ctx.fillStyle = this.colorArray[0];
+                        this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                         colorOpacity = this.ghostPieceOpacity / 255;
                         mino = this.renderedMinos[this.ghostPiece.pieceType];
                     }
@@ -1095,39 +1112,39 @@ class Tetris {
                     }
                 }
 
-                this.context.globalAlpha = colorOpacity;
+                this.ctx.globalAlpha = colorOpacity;
 
                 // render the piece or background
                 if (mino !== null) {
-                    this.context.drawImage(mino, blockX+1, blockY+1);
+                    this.ctx.drawImage(mino, blockX, blockY);
                 }
                 else {
                     // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
-                    this.context.fillStyle = this.colorArray[0];
-                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                    this.ctx.fillStyle = this.colorArray[0];
+                    this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 }
 
-                this.context.globalAlpha = 1;
+                this.ctx.globalAlpha = 1;
 
                 // piece lock animation
                 if (pieceLocking) {
-                    this.context.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage()/100})`;
-                    this.context.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                    this.ctx.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage()/100})`;
+                    this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 }
             }
         }
 
-        this.context.globalAlpha = .8;
-        this.context.strokeStyle = this.borderColor;
-        this.context.strokeRect(gridX, gridY, gridPixWidth, gridPixHeight);
+        this.ctx.globalAlpha = .8;
+        this.ctx.strokeStyle = this.borderColor;
+        this.ctx.strokeRect(gridX-1, gridY-1, gridPixWidth+1, gridPixHeight+1);
 
-        this.context.globalAlpha = 1;
+        this.ctx.globalAlpha = 1;
     }
 
     private drawUI(sinOffset: number, cosOffset: number) {
         if (!this.gameOver) {
-            this.context.fillStyle = this.fontColor;
-            this.context.font = `1.0em "${this.gameFont}"`;
+            this.ctx.fillStyle = this.fontColor;
+            this.ctx.font = `1.0em "${this.gameFont}"`;
 
             let yOffset = Math.floor(3 * Math.cos(Date.now()/600));
 
@@ -1154,35 +1171,35 @@ class Tetris {
             let blBoxY        = ulBoxY + ulBoxHeight + this.blockSize;
 
             // fill box backgrounds
-            this.context.fillStyle = this.gridColor;
-            this.context.filter = 'blur(5px)';
-            this.context.globalCompositeOperation = 'multiply';
+            this.ctx.fillStyle = this.gridColor;
+            this.ctx.filter = 'blur(5px)';
+            this.ctx.globalCompositeOperation = 'multiply';
 
-            this.context.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
-            this.context.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
-            this.context.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
+            this.ctx.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.ctx.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.ctx.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
 
             // fill box main layers
-            this.context.fillStyle = this.bgColor;
-            this.context.filter = 'none';
-            this.context.globalAlpha = .6;
-            this.context.globalCompositeOperation = 'source-over';
+            this.ctx.fillStyle = this.bgColor;
+            this.ctx.filter = 'none';
+            this.ctx.globalAlpha = .6;
+            this.ctx.globalCompositeOperation = 'source-over';
 
-            this.context.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
-            this.context.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
-            this.context.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
+            this.ctx.fillRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.ctx.fillRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.ctx.fillRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
 
             // stroke box borders
-            this.context.strokeStyle = this.borderColor;
-            this.context.strokeRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
-            this.context.strokeRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
-            this.context.strokeRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
+            this.ctx.strokeStyle = this.borderColor;
+            this.ctx.strokeRect(rBoxX, rBoxY, rBoxWidth, rBoxHeight);
+            this.ctx.strokeRect(ulBoxX, ulBoxY, ulBoxWidth, ulBoxHeight);
+            this.ctx.strokeRect(blBoxX, blBoxY, blBoxWidth, blBoxHeight);
 
-            this.context.globalAlpha = 1;
+            this.ctx.globalAlpha = 1;
 
             // render text
-            this.context.fillStyle = this.borderColor;
-            this.context.font = `bold 1.4em "${this.gameFont}"`;
+            this.ctx.fillStyle = this.borderColor;
+            this.ctx.font = `bold 1.4em "${this.gameFont}"`;
             let lBoxTextX = ulBoxX + (ulBoxWidth/2 - 32);
             let lBoxTextY = ulBoxY + (rBoxHeight / 12);
             let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
@@ -1191,34 +1208,41 @@ class Tetris {
 
             // render twice, once with background
             // TODO: Remove double render code? Seems to give bad performance for minimal gain
-            for(let i = 1; i < 2; i++) {
+            for(let i = 0; i < 2; i++) {
                 if (i == 0){
-                    this.context.fillStyle = this.bgColor;
-                    this.context.filter = 'blur(2px)';
-                    this.context.globalCompositeOperation = "overlay";
+                    this.ctx.fillStyle = this.bgColor;
+                    this.ctx.filter = 'blur(2px)';
+                    this.ctx.globalCompositeOperation = "overlay";
                 }
                 else {
-                    this.context.fillStyle =
+                    this.ctx.fillStyle =
                         `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l+30}%)`;
-                    this.context.filter = 'none';
-                    this.context.globalCompositeOperation = "source-over";
+                    this.ctx.filter = 'none';
+                    this.ctx.globalCompositeOperation = "source-over";
                 }
 
-                this.context.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32),
+                this.ctx.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32),
                     rBoxY + (rBoxHeight / 12), 64);
-                this.context.fillText("Hold:", lBoxTextX - i, lBoxTextY-i, 64);
+                this.ctx.fillText("Hold:", lBoxTextX - i, lBoxTextY-i, 64);
 
-                this.context.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
-                this.context.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
-                this.context.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
-                this.context.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
+                this.ctx.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
+                this.ctx.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
+                this.ctx.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
+                this.ctx.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
 
-                this.context.fillStyle = i == 1 ? this.borderColor : this.context.fillStyle;
+                this.ctx.fillStyle = i == 1 ? this.borderColor : this.ctx.fillStyle;
 
-                this.context.fillText(`${this.score}`, lBoxTextX, lBoxTextY * 3 + 32, 64);
-                this.context.fillText(`${this.linesCleared}`, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
-                this.context.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
-                this.context.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+                this.ctx.fillText(`${this.score}`, lBoxTextX, lBoxTextY * 3 + 32, 64);
+                this.ctx.fillText(`${this.linesCleared}`, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
+                this.ctx.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
+                this.ctx.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+
+                let canvasHalf      = Math.floor(this.canvas.width/2);
+                let canvasSixth    = Math.floor(this.canvas.width/6);
+
+                // draw high score - should this be done differently?
+                this.ctx.fillText(`High: ${this.highScore}`, canvasHalf - Math.floor(canvasSixth/2),
+                    32, canvasSixth);
             }
 
             // render held piece
@@ -1228,9 +1252,7 @@ class Tetris {
                 let heldPieceCanvas = this.renderedPieces[this.heldPiece.pieceType];
                 let heldPieceX = ulBoxX + (ulBoxWidth/2 - heldPieceCanvas.width/2);
                 let heldPieceY = Math.floor(((3 * rBoxHeight)/12) + yOffset);
-                this.context.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
-
-                //this.context.restore();
+                this.ctx.drawImage(heldPieceCanvas, heldPieceX, heldPieceY);
             }
 
             // render upcoming pieces
@@ -1240,7 +1262,7 @@ class Tetris {
                 let upcomingPieceCanvas = this.renderedPieces[piece];
                 let upcomingPieceX = rBoxX + (rBoxWidth/2 - upcomingPieceCanvas.width/2);
 
-                this.context.drawImage(upcomingPieceCanvas, upcomingPieceX,
+                this.ctx.drawImage(upcomingPieceCanvas, upcomingPieceX,
                     upcomingPieceY + yOffset);
                 upcomingPieceY += rBoxHeight / 6;
             }
@@ -1251,7 +1273,7 @@ class Tetris {
                 let yPos = 0;
                 for (let type of Tetromino.pieceTypes) {
                     let mino = this.renderedMinos[type];
-                    this.context.drawImage(mino, 0, yPos);
+                    this.ctx.drawImage(mino, 0, yPos);
                     yPos += mino.height;
                 }
             }
@@ -1268,45 +1290,45 @@ class Tetris {
         if (this.pauseOverlay){
             this.drawOverlay();
 
-            this.context.fillStyle = this.fontColor;
-            this.context.font = `3.0em "${this.gameFont}"`;
-            this.context.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
-            this.context.fillText("Pause", this.canvas.width/3+64,
+            this.ctx.fillStyle = this.fontColor;
+            this.ctx.font = `3.0em "${this.gameFont}"`;
+            this.ctx.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
+            this.ctx.fillText("Pause", this.canvas.width/3+64,
                 this.canvas.height/2, this.canvas.height/2);
-            this.context.globalAlpha = 1;
+            this.ctx.globalAlpha = 1;
         }
     }
 
     private drawGameOver(){
         this.drawOverlay()
 
-        this.context.fillStyle = this.fontColor
-        this.context.font = `3.0em "${this.gameFont}"`;
-        this.context.fillText("Game Over", this.canvas.width/3+50,
+        this.ctx.fillStyle = this.fontColor
+        this.ctx.font = `3.0em "${this.gameFont}"`;
+        this.ctx.fillText("Game Over", this.canvas.width/3+50,
             this.canvas.height/2, this.canvas.width);
     }
 
     private drawTitle() {
-        this.context.fillStyle = this.fontColor;
-        this.context.font = `5.0em "${this.gameFont}"`;
-        this.context.fillText("Tetris", 20,
+        this.ctx.fillStyle = this.fontColor;
+        this.ctx.font = `5.0em "${this.gameFont}"`;
+        this.ctx.fillText("Tetris", 20,
             80, this.canvas.width);
 
-        this.context.font = `1.0em "${this.gameFont}"`;
+        this.ctx.font = `1.0em "${this.gameFont}"`;
 
-        this.context.fillText("Programmed by John O'Hara in 2021",
+        this.ctx.fillText("Programmed by John O'Hara in 2021",
             40, 120, this.canvas.width/2);
 
-        this.context.fillText("Press Enter to Start",
+        this.ctx.fillText("Press Enter to Start",
             this.canvas.width/3+50, 300, this.canvas.width/2);
 
     }
 
     private drawOverlay(){
-        this.context.globalAlpha = this.overlayOpacity;
-        this.context.fillStyle = this.pauseColor;
-        this.context.fillRect(0,0,this.canvas.width, this.canvas.height);
-        this.context.globalAlpha = 1;
+        this.ctx.globalAlpha = this.overlayOpacity;
+        this.ctx.fillStyle = this.pauseColor;
+        this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
+        this.ctx.globalAlpha = 1;
     }
 
     private static renderMinos(pieceType: string, canvas: HTMLCanvasElement,
@@ -1315,19 +1337,38 @@ class Tetris {
             throw new Error("renderMinos was not given a valid piece type!");
         }
 
-        let context = canvas.getContext('2d');
+        let ctx = canvas.getContext('2d');
 
-        context.fillStyle = color;
-        context.fillRect(0, 0, blockSize, blockSize);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, blockSize, blockSize);
 
-        let colorGradient = context.createLinearGradient(2, 2,blockSize - 4,blockSize - 4);
+        let blockCenter = Math.floor(blockSize / 2);
 
-        colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
-        colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
-        colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
+        let colorGradient = ctx.createRadialGradient(blockCenter, blockCenter, 1,
+            blockCenter, blockCenter, blockSize);
 
-        context.fillStyle = colorGradient;
-        context.fillRect(1, 1, blockSize - 2, blockSize - 2);
+        colorGradient.addColorStop(0, 'rgba(200,200,200,.75)');
+        colorGradient.addColorStop(1, 'rgba(255,255,255,0)');
+
+        ctx.fillStyle = colorGradient;
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillRect(0, 0, blockSize, blockSize);
+        ctx.globalCompositeOperation = "source-over";
+
+
+        let shineGradient = ctx.createLinearGradient(2, 2,blockSize - 4,blockSize - 4);
+
+        shineGradient.addColorStop(0,'rgba(255,255,255,0.4)');
+        shineGradient.addColorStop(0.5,'rgba(255,255,255,0.15)');
+        shineGradient.addColorStop(.5, `rgba(64,64,64,0)`);
+
+        ctx.fillStyle = shineGradient;
+        ctx.fillRect(2, 2, blockSize - 4, blockSize - 4);
+
+        ctx.strokeStyle = "#fff";
+        ctx.globalCompositeOperation = "lighten";
+        ctx.strokeRect(0, 0, blockSize, blockSize);
+        ctx.globalCompositeOperation = "source-over";
     }
 
     // used to render a piece for display only (next piece queue, held piece)
@@ -1337,7 +1378,7 @@ class Tetris {
             throw new Error("renderCosmeticPiece was not given a valid piece type!");
         }
 
-        let context = canvas.getContext('2d');
+        let ctx = canvas.getContext('2d');
 
         for (let i = 0; i < 4; i++){
             let blockCoords = (Tetromino.startPositions[pieceType] as string[])[i].split(":")
@@ -1346,22 +1387,22 @@ class Tetris {
             let xPos = gridSize + ((blockCoords[1] - 3) * (blockSize + gridSize));
             let yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
 
-            context.drawImage(mino, xPos, yPos);
+            ctx.drawImage(mino, xPos, yPos);
 
             // old way
             /*
-            context.fillStyle = color;
-            context.fillRect(xPos, yPos, blockSize, blockSize);
+            ctx.fillStyle = color;
+            ctx.fillRect(xPos, yPos, blockSize, blockSize);
 
-            let colorGradient = context.createLinearGradient(xPos + 4, yPos + 4,
+            let colorGradient = ctx.createLinearGradient(xPos + 4, yPos + 4,
                 xPos + blockSize - 4, yPos + blockSize - 4);
 
             colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
             colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
             colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
 
-            context.fillStyle = colorGradient;
-            context.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
+            ctx.fillStyle = colorGradient;
+            ctx.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
              */
         }
     }
