@@ -17,6 +17,7 @@ var Tetromino = /** @class */ (function () {
     function Tetromino(pieceType, game, well, isGhost, pos) {
         if (isGhost === void 0) { isGhost = false; }
         if (pos === void 0) { pos = null; }
+        this.floorKicked = false;
         this.gravity = null;
         this.lockDelay = null;
         this.rotation = [0, 1, 2, 3];
@@ -100,14 +101,44 @@ var Tetromino = /** @class */ (function () {
             this.rotation.unshift(this.rotation.pop());
             transform = Tetromino.rotationTransforms[this.pieceType][this.rotation[0]];
         }
-        for (var i = 0; i < transform.length && validMove; i++) {
-            var blockRotation = transform[i].split(":").map(function (x) { return parseInt(x); });
-            // remember - [0] is y, [1] is x here (row, column)
-            var currentPos = this.pos[i].split(":").map(function (x) { return parseInt(x); });
-            currentPos[1] += direction === "right" ? blockRotation[0] : blockRotation[0] * -1;
-            currentPos[0] += direction === "right" ? blockRotation[1] : blockRotation[1] * -1;
-            newPos[i] = currentPos.join(":");
-            validMove = this.checkValidMove(currentPos);
+        // wall kick logic:
+        // Try normal, project right, then left, then up
+        // Attempt #:
+        // 0 - as is
+        // 1 - try right shift
+        // 2 - try left shift
+        // 3 - try up shift - ONLY IF !this.floorKicked
+        var rotationsAttempted = !this.floorKicked ? 4 : 3;
+        var kicksAttempted = this.pieceType === "I" ? 4 : 3;
+        var rotationFound = false;
+        console.log("Starting rotations: rotationsAttempted = " + rotationsAttempted + ", kicksAttempted = " + kicksAttempted);
+        for (var rotation = 0; rotation < rotationsAttempted && !rotationFound; rotation++) {
+            var xKick = rotation === 1 ? 1 : 0;
+            var yKick = rotation === 3 ? -1 : 0;
+            xKick = rotation === 2 ? -1 : xKick;
+            console.log("\trotation: " + rotation + " - xKick, yKick = " + xKick + ", " + yKick);
+            for (var kick = 1; kick < kicksAttempted && !rotationFound; kick++) {
+                // is this it?
+                newPos = [];
+                validMove = true;
+                console.log("\t\tkick attempt " + kick + "...");
+                for (var i = 0; i < transform.length && validMove; i++) {
+                    console.log("\t\ttransform " + i + "...");
+                    // for rotation transforms, [0] is x, [1] is y (column, row)
+                    var blockRotation = transform[i].split(":").map(function (x) { return parseInt(x); });
+                    // remember - here [0] is y, [1] is x (row, column)
+                    var currentPos = this.pos[i].split(":").map(function (x) { return parseInt(x); });
+                    currentPos[1] += xKick * kick;
+                    currentPos[0] += yKick * kick;
+                    currentPos[1] += direction === "right" ? blockRotation[0] : blockRotation[0] * -1;
+                    currentPos[0] += direction === "right" ? blockRotation[1] : blockRotation[1] * -1;
+                    newPos[i] = currentPos.join(":");
+                    validMove = this.checkValidMove(currentPos);
+                    console.log("\t\t\tvalidMove = " + validMove);
+                }
+                rotationFound = validMove;
+                this.floorKicked = this.floorKicked || rotation === 3 && validMove;
+            }
         }
         if (validMove === true) {
             this.pos = newPos;

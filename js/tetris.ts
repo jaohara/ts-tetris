@@ -70,20 +70,19 @@ class Tetromino {
         ]
     }
 
-    gravity: ReturnType<typeof setTimeout> = null;
-    moveLock: boolean;
-    moveQueue: MoveQueue;
-
-    readonly isGhost: boolean;
-    readonly pieceType;
-
     private readonly ghost: Tetromino;
     private readonly game: Tetris;
     private readonly well: Well;
 
+    readonly isGhost: boolean;
+    readonly pieceType;
+
+    private floorKicked: boolean = false;
+    gravity: ReturnType<typeof setTimeout> = null;
     private lockDelay: ReturnType<typeof setTimeout> = null;
     private lockPercentage: number;
-
+    moveQueue: MoveQueue;
+    moveLock: boolean;
     private pos: string[];
     private rotation = [0, 1, 2, 3];
 
@@ -178,18 +177,56 @@ class Tetromino {
             transform = Tetromino.rotationTransforms[this.pieceType][this.rotation[0]];
         }
 
+        // wall kick logic:
+        // Try normal, project right, then left, then up
+        // Attempt #:
+        // 0 - as is
+        // 1 - try right shift
+        // 2 - try left shift
+        // 3 - try up shift - ONLY IF !this.floorKicked
+        let rotationsAttempted = !this.floorKicked ? 4 : 3;
+        let kicksAttempted = this.pieceType === "I" ? 4 : 3;
+        let rotationFound = false;
+        console.log(`Starting rotations: rotationsAttempted = ${rotationsAttempted}, kicksAttempted = ${kicksAttempted}`);
 
-        for (let i = 0; i < transform.length && validMove; i++) {
-            let blockRotation = transform[i].split(":").map(x => parseInt(x));
-            // remember - [0] is y, [1] is x here (row, column)
-            let currentPos = this.pos[i].split(":").map(x => parseInt(x));
+        for (let rotation = 0; rotation < rotationsAttempted && !rotationFound; rotation++) {
+            let xKick = rotation === 1 ? 1 : 0;
+            let yKick = rotation === 3 ? -1 : 0;
+            xKick = rotation === 2 ? -1 : xKick;
 
-            currentPos[1] += direction === "right"? blockRotation[0] : blockRotation[0] * -1;
-            currentPos[0] += direction === "right"? blockRotation[1] : blockRotation[1] * -1;
+            console.log(`\trotation: ${rotation} - xKick, yKick = ${xKick}, ${yKick}`)
 
-            newPos[i] = currentPos.join(":");
+            for (let kick = 1; kick < kicksAttempted && !rotationFound; kick++) {
+                // is this it?
+                newPos = [];
+                validMove = true;
+                console.log(`\t\tkick attempt ${kick}...`);
 
-            validMove = this.checkValidMove(currentPos);
+                for (let i = 0; i < transform.length && validMove; i++) {
+                    console.log(`\t\ttransform ${i}...`);
+
+                    // for rotation transforms, [0] is x, [1] is y (column, row)
+                    let blockRotation = transform[i].split(":").map(x => parseInt(x));
+                    // remember - here [0] is y, [1] is x (row, column)
+                    let currentPos = this.pos[i].split(":").map(x => parseInt(x));
+
+                    currentPos[1] += xKick * kick;
+                    currentPos[0] += yKick * kick;
+
+
+                    currentPos[1] += direction === "right" ? blockRotation[0] : blockRotation[0] * -1;
+                    currentPos[0] += direction === "right" ? blockRotation[1] : blockRotation[1] * -1;
+
+                    newPos[i] = currentPos.join(":");
+
+                    validMove = this.checkValidMove(currentPos);
+
+                    console.log(`\t\t\tvalidMove = ${validMove}`);
+                }
+
+                rotationFound = validMove;
+                this.floorKicked = this.floorKicked || rotation === 3 && validMove;
+            }
         }
 
         if (validMove === true) {
