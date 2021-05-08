@@ -685,7 +685,7 @@ class Tetris {
     // graphics/debug options
     private noGravity: boolean = false;
     private noBackground: boolean = false;
-    private pieceGlow: boolean = true;
+    private pieceGlow: boolean = false;     // todo: make this more performant so it can be on by default
     private simpleBackground: boolean = true;
     private testRenderMinos: boolean = false;
 
@@ -1010,8 +1010,8 @@ class Tetris {
     lineClear(): void {
         this.linesCleared++;
 
-        this.bgGradientTarget1 += 3;
-        this.bgGradientTarget2 += 3;
+        this.bgGradientTarget1 += 2;
+        this.bgGradientTarget2 += 2;
         this.bgGradientTarget1 = this.bgGradientTarget1 > 360 ?
             this.bgGradientTarget1 - 360 : this.bgGradientTarget1;
         this.bgGradientTarget2 = this.bgGradientTarget2 > 360 ?
@@ -1040,7 +1040,7 @@ class Tetris {
                 this.bgGradientColorString2 =
                     `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`;
 
-            }, this.updateFrequency * 4);
+            }, this.updateFrequency * 6);
         }
     }
 

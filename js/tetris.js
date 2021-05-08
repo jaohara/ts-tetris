@@ -574,7 +574,7 @@ var Tetris = /** @class */ (function () {
         // graphics/debug options
         this.noGravity = false;
         this.noBackground = false;
-        this.pieceGlow = true;
+        this.pieceGlow = false; // todo: make this more performant so it can be on by default
         this.simpleBackground = true;
         this.testRenderMinos = false;
         this.canvas = document.getElementById("main-canvas");
@@ -864,8 +864,8 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.lineClear = function () {
         var _this = this;
         this.linesCleared++;
-        this.bgGradientTarget1 += 3;
-        this.bgGradientTarget2 += 3;
+        this.bgGradientTarget1 += 2;
+        this.bgGradientTarget2 += 2;
         this.bgGradientTarget1 = this.bgGradientTarget1 > 360 ?
             this.bgGradientTarget1 - 360 : this.bgGradientTarget1;
         this.bgGradientTarget2 = this.bgGradientTarget2 > 360 ?
@@ -888,7 +888,7 @@ var Tetris = /** @class */ (function () {
                     "hsl(" + _this.bgGradientColor1.h + ", " + _this.bgGradientColor1.s + "%, " + _this.bgGradientColor1.l + "%)";
                 _this.bgGradientColorString2 =
                     "hsl(" + _this.bgGradientColor2.h + ", " + _this.bgGradientColor2.s + "%, " + _this.bgGradientColor2.l + "%)";
-            }, this.updateFrequency * 4);
+            }, this.updateFrequency * 6);
         }
     };
     Tetris.prototype.lockActivePiece = function () {
