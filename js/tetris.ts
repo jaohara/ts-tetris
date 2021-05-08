@@ -117,7 +117,7 @@ class Tetromino {
 
     private static lockDelayTimer(piece: Tetromino) {
         if (piece.lockPercentage > 99){ // we seem to get 99.99999... instead of 100 at the end
-            console.log(`Resolving lock delay on ${piece} - lockPercentage: ${piece.lockPercentage}`);
+            //console.log(`Resolving lock delay on ${piece} - lockPercentage: ${piece.lockPercentage}`);
             piece.lockPercentage = 0;
 
             // I guess here we'll just lock the piece, right?
@@ -131,11 +131,11 @@ class Tetromino {
     }
 
     removeLockDelay(): void {
-        console.log("Removing lock delay...");
+        //console.log("Removing lock delay...");
         clearInterval(this.lockDelay);
         this.lockDelay = null;
         this.lockPercentage = 0;
-        console.log(`Removed delay on ${this}`);
+        //console.log(`Removed delay on ${this}`);
     }
 
     getGhost(): Tetromino {
@@ -147,16 +147,21 @@ class Tetromino {
     }
 
     hardDrop() {
-        let keepDroppin = true;
-        let dropScore = 0;
+        if (this.lockPercentage == 0) {
+            let keepDroppin = true;
+            let dropScore = 0;
 
-        do {
-            keepDroppin = this.move("down", true);
-            dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
-        } while (keepDroppin);
+            do {
+                keepDroppin = this.move("down", true);
+                dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
+            } while (keepDroppin);
 
-        if (!this.isGhost){
-            this.game.addScore(dropScore);
+            if (!this.isGhost) {
+                this.game.addScore(dropScore);
+            }
+        }
+        else { // This might solve the lock/hold bug?
+            this.lockPercentage = 100;
         }
     }
 
@@ -218,11 +223,16 @@ class Tetromino {
     }
 
     move(direction: string, hardDrop: boolean = false): boolean {
+        if (this.lockPercentage > 0 && direction === "down"){
+            this.lockPercentage = 100;
+            return false;
+        }
+
         // check to see if valid move
         let validMove = true;
 
         if (direction === "gravity"){
-            console.log("Moving by gravity...");
+            //console.log("Moving by gravity...");
         }
 
         // check direction and make sure it can move in a certain way
@@ -255,7 +265,7 @@ class Tetromino {
                         this.removeLockDelay();
                     }
                     else {
-                        console.log("Attempting to reset lock delay...");
+                        //console.log("Attempting to reset lock delay...");
                         //this.lockPercentage = 0;
                         this.removeLockDelay();
                     }
@@ -272,7 +282,7 @@ class Tetromino {
             this.well.lockPiece(this);
         }
         else if (direction === "gravity" && !this.isGhost && this.lockPercentage == 0){
-            console.log("Non valid move on a real piece due to gravity");
+            //console.log("Non valid move on a real piece due to gravity");
 
             if (this.lockPercentage == 0 && this.lockDelay == null){
                 this.lockDelay = setInterval(() => {Tetromino.lockDelayTimer(this)},
@@ -361,12 +371,17 @@ class MoveQueue {
  * at is as coordinates. Y values also ascend downward.
  */
 class Well {
+    private game: Tetris;
     private grid: number[][] = [];
     private readonly height = 20;
     private readonly width = 10;
-    private readonly clearDelay = 30; // in ms
 
-    private game: Tetris;
+    private clearAlpha: number = 0;
+    private clearAnimationInterval: ReturnType<typeof setInterval> = null;
+    private clearAnimationCompleting: boolean = false;
+    private readonly clearDelay = 30; // in ms
+    private rowsClearing: number[] = [];
+    private rowsCleared: number[] = [];
 
     constructor(game: Tetris){
         this.game = game;
@@ -387,6 +402,14 @@ class Well {
         return this.grid;
     }
 
+    getRowsClearing(): number[] {
+        return this.rowsClearing;
+    }
+
+    getClearAlpha(): number {
+        return this.clearAlpha;
+    }
+
     getHeight(): number {
         return this.grid.length;
     }
@@ -395,54 +418,134 @@ class Well {
         return this.grid[0].length;
     }
 
+    // TODO: Remove when I'm certain the new method is working
+    //
+    // clearLines() {
+    //     this.game.setSpawnLock(true);
+    //     let linesCleared = 0;
+    //
+    //     // how would I do something with a pause or animation on line clear?
+    //     for (let row = this.getHeight() - 1; row > 0; row--){
+    //         if (!this.grid[row].includes(0)){
+    //             // clear that line
+    //             this.grid.splice(row, 1);
+    //
+    //             let replacementRow = [];
+    //
+    //             for (let col = 0; col < this.width; col++){
+    //                 replacementRow.push(0);
+    //             }
+    //
+    //             this.grid.unshift(replacementRow);
+    //
+    //             this.game.lineClear();
+    //             linesCleared++;
+    //
+    //             // continue checking from this spot
+    //             row++;
+    //         }
+    //         /*
+    //             Here's an idea - I don't think a piece could be floating, so we could
+    //             probably stop this loop from checking the first time we hit a row of
+    //             all 0s - meaning you're now looking at the blank space above the current
+    //             structure of blocks in the well.
+    //             I could add another condition to the for loop, and then have an else-if
+    //             right above that checks if (!this.grid[row].includes(1,2,3,4,5,6,7)) or
+    //             whatever the syntax would be, then it sets a boolean to true and breaks
+    //             the loop
+    //          */
+    //     }
+    //
+    //     // handle scoring
+    //     if (linesCleared > 0){
+    //         let lineScore = (200 * linesCleared);
+    //         lineScore -= linesCleared < 4 ? 100 : 0;
+    //         lineScore *= this.game.getLevel();
+    //
+    //         console.log(`linesCleared: ${linesCleared} - lineScore: ${lineScore}`);
+    //         this.game.addScore(lineScore);
+    //     }
+    //
+    //     this.game.setSpawnLock(false);
+    // }
+
     clearLines() {
         this.game.setSpawnLock(true);
-        let linesCleared = 0;
+        // todo: set
 
-        // how would I do something with a pause or animation on line clear?
-        for (let row = this.getHeight() - 1; row > 0; row--){
-            if (!this.grid[row].includes(0)){
-                // clear that line
-                this.grid.splice(row, 1);
-
-                let replacementRow = [];
-
-                for (let col = 0; col < this.width; col++){
-                    replacementRow.push(0);
+        if (this.clearAnimationInterval === null) {
+            //console.log("clearLines has been called");
+            //console.log("\tNo animation, checking rows....")
+            //for (let row = this.getHeight() - 1; row > 0; row--) {
+            for (let row = 0; row < this.getHeight(); row++) {
+                if (!this.grid[row].includes(0)) {
+                    console.log(`\t\tFound a row to clear! - row ${row}`)
+                    this.rowsClearing.push(row);
                 }
-
-                this.grid.unshift(replacementRow);
-
-                this.game.lineClear();
-                linesCleared++;
-
-                // continue checking from this spot
-                row++;
             }
-            /*
-                Here's an idea - I don't think a piece could be floating, so we could
-                probably stop this loop from checking the first time we hit a row of
-                all 0s - meaning you're now looking at the blank space above the current
-                structure of blocks in the well.
-
-                I could add another condition to the for loop, and then have an else-if
-                right above that checks if (!this.grid[row].includes(1,2,3,4,5,6,7)) or
-                whatever the syntax would be, then it sets a boolean to true and breaks
-                the loop
-             */
         }
 
-        // handle scoring
-        if (linesCleared > 0){
-            let lineScore = (200 * linesCleared);
-            lineScore -= linesCleared < 4 ? 100 : 0;
-            lineScore *= this.game.getLevel();
+        if (this.rowsClearing.length > 0) {
+            if (this.clearAnimationInterval === null) {
+                console.log("\tRows found with no existing animation...")
+                console.log(`\t\tRows clearing: ${this.rowsClearing}`);
+                console.log(`\t\tRows cleared: ${this.rowsCleared}`);
+                this.clearAnimationInterval = setInterval(() => {
+                    //console.log("\tclearAnimationInterval is running...");
+                    if (this.clearAlpha < 1.0) {
+                        // ten frames to white? twenty?
+                        this.clearAlpha += .1;
+                    } else {
+                        // probably going to need another "else if" for the next animation step if I want one
+                        if (!this.clearAnimationCompleting) {
+                            console.log("\tFINAL STATE - clearAnimationInterval");
+                            this.clearAnimationCompleting = true;
+                            clearInterval(this.clearAnimationInterval);
+                            this.clearAnimationInterval = null;
 
-            console.log(`linesCleared: ${linesCleared} - lineScore: ${lineScore}`);
-            this.game.addScore(lineScore);
+                            //this.rowsClearing.sort((a, b) => a - b);
+
+
+                            for (let row of this.rowsClearing) {
+                                if (!this.rowsCleared.includes(row)) {
+                                    console.log(`Clearing Row ${row}...`);
+                                    this.rowsCleared.push(row);
+                                    this.game.lineClear();
+                                    this.grid.splice(row, 1);
+                                    let replacementRow = [];
+
+                                    for (let col = 0; col < this.width; col++) {
+                                        replacementRow.push(0);
+                                    }
+
+                                    this.grid.unshift(replacementRow);
+                                }
+                            }
+
+                            // handle scoring
+                            let lineScore = (200 * this.rowsClearing.length);
+                            lineScore -= this.rowsClearing.length < 4 ? 100 : 0;
+                            lineScore *= this.game.getLevel();
+
+                            console.log(`linesCleared: ${this.rowsClearing.length} - lineScore: ${lineScore}`);
+
+                            // reset the row clear animation
+                            this.clearAnimationCompleting = false;
+                            this.rowsClearing = [];
+                            this.rowsCleared = [];
+                            this.clearAlpha = 0;
+
+                            this.game.addScore(lineScore);
+
+                            this.game.setSpawnLock(false);
+                        }
+                    }
+                }, this.game.updateFrequency);
+            }
         }
-
-        this.game.setSpawnLock(false);
+        else {
+            this.game.setSpawnLock(false);
+        }
     }
 
     lockPiece(piece: Tetromino):void {
@@ -507,7 +610,7 @@ class Tetris {
         "e", "n", "Enter"
     ];
 
-    private readonly debugControls = ["0", "9", "8", "7"];
+    private readonly debugControls = ["0", "9", "8", "7", "6", "PageUp", "PageDown"];
 
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these
@@ -545,7 +648,7 @@ class Tetris {
     private previousLoopTime: number;
     private running: boolean;
     private score: number;
-    private spawnLock: boolean;
+    private spawnLock: boolean = false;
     private titleScreen: boolean = true;
 
     // graphics stuff
@@ -557,12 +660,12 @@ class Tetris {
      */
     private readonly bgColor        = '#1b1d24';
     // private bgGradientColor1        = {'h': 240, 's': 69, 'l': 13};
-    private bgGradientColor1        = {'h': 240, 's': 77, 'l': 32};
-    private bgGradientColor2        = {'h': 216, 's': 84, 'l': 36};
-    private bgGradientColorString1  = 'hsl(240,77%,32%)';
-    private bgGradientColorString2  = 'hsl(216, 84%, 36%)';
-    private bgGradientTarget1       = 240;
-    private bgGradientTarget2       = 216;
+    private bgGradientColor1        = {'h': 201, 's': 77, 'l': 32};
+    private bgGradientColor2        = {'h': 177, 's': 84, 'l': 36};
+    private bgGradientColorString1  = 'hsl(201,77%,32%)';
+    private bgGradientColorString2  = 'hsl(177, 84%, 36%)';
+    private bgGradientTarget1       = 201;
+    private bgGradientTarget2       = 177;
     private bgGradientTimer: ReturnType<typeof setInterval> = null;
     private readonly bezierColor1   = '#3498db';
     private readonly bezierColor2   = '#68e4b6';
@@ -582,6 +685,7 @@ class Tetris {
     // graphics/debug options
     private noGravity: boolean = false;
     private noBackground: boolean = false;
+    private pieceGlow: boolean = true;
     private simpleBackground: boolean = true;
     private testRenderMinos: boolean = false;
 
@@ -663,8 +767,11 @@ class Tetris {
                     // check for levelup
                     if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15){
                         this.gameLevel++;
-                        clearInterval(this.activePiece.gravity);
-                        this.activePiece.gravity = null;
+
+                        if (this.activePiece !== null) {
+                            clearInterval(this.activePiece.gravity);
+                            this.activePiece.gravity = null;
+                        }
                     }
 
                     // check if backup piece bag is exhausted
@@ -685,12 +792,11 @@ class Tetris {
 
                     // create new piece if one doesn't exist
                     if (this.activePiece == null && !this.spawnLock) {
-                        console.log(`this.activePiece: ${this.activePiece}, this.spawnLock: ${this.spawnLock}`);
                         this.newPiece();
                     }
 
                     // give the active piece gravity if it doesn't have it
-                    if (this.activePiece.gravity === null){
+                    if (this.activePiece !== null && this.activePiece.gravity === null){
                         this.activePiece.gravity = setInterval(() => {
                             if (!this.paused && !this.noGravity) {
                                 if (!this.activePiece.moveLock) {
@@ -765,7 +871,7 @@ class Tetris {
     }
 
     private static pollInput(event: KeyboardEvent = null, input: string = null, gamepadSource: boolean = false): void {
-        console.log(`event: ${event}, input: ${input}`);
+        //console.log(`event: ${event}, input: ${input}`);
 
         // my logic seems redundant here but I dunno
         if (event !== null) {
@@ -810,17 +916,31 @@ class Tetris {
                 }
             }
         } else if (game.debugControls.includes(input)){
+            event.preventDefault();
+
             if (input === "0") {
                 game.noBackground = !game.noBackground;
             }
             else if (input === "9") {
                 game.simpleBackground = !game.simpleBackground;
             }
-            else if (input === "8"){
+            else if (input === "8") {
                 game.testRenderMinos = !game.testRenderMinos;
             }
-            else if (input === "7"){
+            else if (input === "7") {
                 game.noGravity = !game.noGravity;
+            }
+            else if (input === "6") {
+                game.pieceGlow = !game.pieceGlow;
+            }
+            else if (input === "PageUp") {
+                game.linesCleared += 10;
+            }
+            else if (input === "PageDown") {
+                if (game.linesCleared >= 10 && game.gameLevel > 1){
+                    game.linesCleared -= 10;
+                    game.gameLevel--;
+                }
             }
         }
     }
@@ -876,9 +996,10 @@ class Tetris {
     }
 
     private newPiece(): void {
-        console.log("Generating new piece...");
+        let newPieceType = this.pieceBag.pop();
+        console.log(`Generating new piece: ${newPieceType} - Remaining in pieceBag: ${this.pieceBag}`);
         //this.activePiece.removeLockDelay();
-        this.activePiece = new Tetromino(this.pieceBag.pop(), game, this.well);
+        this.activePiece = new Tetromino(newPieceType, game, this.well);
         this.ghostPiece  = this.activePiece.getGhost();
 
         let pieceBagContents = [...this.pieceBag].reverse();
@@ -924,6 +1045,7 @@ class Tetris {
     }
 
     lockActivePiece() {
+        console.log(`Locking active piece: ${this.activePiece}`);
         clearInterval(this.activePiece.gravity);
         this.activePiece = null;
         this.ghostPiece = null;
@@ -934,7 +1056,10 @@ class Tetris {
         if (!this.holdLock) {
             this.spawnLock = true;
             clearInterval(this.activePiece.gravity);
+            this.activePiece.gravity = null;
 
+
+            console.log(`Holding ${this.activePiece}, swapping for ${this.heldPiece}`);
             // did reordering these steps change the lockdelay bug?
             this.activePiece.removeLockDelay();
             let tempPiece = this.activePiece;
@@ -1081,64 +1206,80 @@ class Tetris {
         let ghostPos = this.ghostPiece === null ? null : this.ghostPiece.getPos();
 
         // fill the blocks, rendering the active piece/that creepy ghost piece
-        for (let row = 0; row < gridHeight; row++) {
-            for (let col = 0; col < gridWidth; col++) {
-                let blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
-                let blockY = gridY + this.gridSize + (row * (this.blockSize + this.gridSize));
+        for (let gridPasses = 0; gridPasses < 2; gridPasses++) {
+            for (let row = 0; row < gridHeight; row++) {
+                for (let col = 0; col < gridWidth; col++) {
+                    let blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
+                    let blockY = gridY + this.gridSize + (row * (this.blockSize + this.gridSize));
 
-                let colorOpacity = 1;
-                let mino: HTMLCanvasElement = null;
-                let pieceLocking = false;
+                    let colorOpacity = 1;
+                    let mino: HTMLCanvasElement = null;
+                    let pieceLocking = false;
 
-                if (piecePos !== null && piecePos.includes(`${row}:${col}`) ||
-                    ghostPos !== null && ghostPos.includes(`${row}:${col}`)) {
-                    if (piecePos.includes(`${row}:${col}`)) {
-                        pieceLocking = piecePos.includes(`${row}:${col}`) ? this.activePiece.getLockPercentage() > 0 : false;
-                        mino = this.renderedMinos[this.activePiece.pieceType];
+                    // only draw pieces on second pass
+                    if (gridPasses > 0 &&
+                        piecePos !== null && piecePos.includes(`${row}:${col}`) ||
+                        ghostPos !== null && ghostPos.includes(`${row}:${col}`)) {
+                        if (piecePos.includes(`${row}:${col}`)) {
+                            if (this.pieceGlow) {
+                                this.ctx.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)]
+                                this.ctx.filter = 'blur(5px)';
+                                //this.ctx.globalCompositeOperation = "lighten";
+                                this.ctx.globalAlpha = 1;
+                                this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+
+                                this.ctx.filter = 'none';
+                                this.ctx.globalCompositeOperation = "source-over";
+                                this.ctx.globalAlpha = 1;
+                            }
+
+                            pieceLocking = piecePos.includes(`${row}:${col}`) ? this.activePiece.getLockPercentage() > 0 : false;
+                            mino = this.renderedMinos[this.activePiece.pieceType];
+                        } else if (ghostPos.includes(`${row}:${col}`)) {
+                            this.ctx.fillStyle = this.colorArray[0];
+                            this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
+                            colorOpacity = this.ghostPieceOpacity / 255;
+                            mino = this.renderedMinos[this.ghostPiece.pieceType];
+                        }
+                    } else {
+                        if (grid[row][col] === 0) {
+                            colorOpacity = .8;
+                        } else {
+                            mino = this.renderedMinos[Tetromino.pieceTypes[grid[row][col] - 1]];
+                        }
                     }
-                    else if (ghostPos.includes(`${row}:${col}`)) {
+
+                    this.ctx.globalAlpha = colorOpacity;
+
+                    // render the piece or background
+                    if (mino !== null) {
+                        this.ctx.drawImage(mino, blockX, blockY);
+                    } else if (gridPasses === 0) {
+                        // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
                         this.ctx.fillStyle = this.colorArray[0];
                         this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-                        colorOpacity = this.ghostPieceOpacity / 255;
-                        mino = this.renderedMinos[this.ghostPiece.pieceType];
                     }
-                }
-                else {
-                    if (grid[row][col] === 0) {
-                        colorOpacity = .8;
+
+                    this.ctx.globalAlpha = 1;
+
+                    // piece lock animation
+                    if (pieceLocking || this.well.getRowsClearing().includes(row)) {
+                        let overlayOpacity = pieceLocking ? this.activePiece.getLockPercentage() / 100
+                            : this.well.getClearAlpha();
+
+                        // this.ctx.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage() / 100})`;
+                        this.ctx.fillStyle = `rgba(255,255,255,${overlayOpacity})`;
+                        this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                     }
-                    else {
-                        mino = this.renderedMinos[Tetromino.pieceTypes[grid[row][col] - 1]];
-                    }
-                }
-
-                this.ctx.globalAlpha = colorOpacity;
-
-                // render the piece or background
-                if (mino !== null) {
-                    this.ctx.drawImage(mino, blockX, blockY);
-                }
-                else {
-                    // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
-                    this.ctx.fillStyle = this.colorArray[0];
-                    this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
-                }
-
-                this.ctx.globalAlpha = 1;
-
-                // piece lock animation
-                if (pieceLocking) {
-                    this.ctx.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage()/100})`;
-                    this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                 }
             }
         }
 
-        this.ctx.globalAlpha = .8;
-        this.ctx.strokeStyle = this.borderColor;
-        this.ctx.strokeRect(gridX-1, gridY-1, gridPixWidth+1, gridPixHeight+1);
+            this.ctx.globalAlpha = .8;
+            this.ctx.strokeStyle = this.borderColor;
+            this.ctx.strokeRect(gridX - 1, gridY - 1, gridPixWidth + 1, gridPixHeight + 1);
 
-        this.ctx.globalAlpha = 1;
+            this.ctx.globalAlpha = 1;
     }
 
     private drawUI(sinOffset: number, cosOffset: number) {
@@ -1208,7 +1349,7 @@ class Tetris {
 
             // render twice, once with background
             // TODO: Remove double render code? Seems to give bad performance for minimal gain
-            for(let i = 0; i < 2; i++) {
+            for(let i = 1; i < 2; i++) {
                 if (i == 0){
                     this.ctx.fillStyle = this.bgColor;
                     this.ctx.filter = 'blur(2px)';
@@ -1240,7 +1381,13 @@ class Tetris {
                 let canvasHalf      = Math.floor(this.canvas.width/2);
                 let canvasSixth    = Math.floor(this.canvas.width/6);
 
-                // draw high score - should this be done differently?
+
+                // todo:
+                // draw high score - should this be done differently? little rough right now
+                this.ctx.fillStyle = this.bgGradientColorString1;
+                this.ctx.fillText(`High: ${this.highScore}`, canvasHalf - Math.floor(canvasSixth/2)+1,
+                    33, canvasSixth);
+                this.ctx.fillStyle = this.borderColor;
                 this.ctx.fillText(`High: ${this.highScore}`, canvasHalf - Math.floor(canvasSixth/2),
                     32, canvasSixth);
             }
