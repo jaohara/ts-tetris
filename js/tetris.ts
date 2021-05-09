@@ -600,6 +600,20 @@ class Well {
 }
 
 /**
+ * CanvasDimensions - an interface to define an object to store commonly needed fractions a canvas' size
+ */
+interface CanvasDimensions {
+    c1?: number;
+    c2?: number;
+    c3?: number;
+    c4?: number;
+    c6?: number;
+    c8?: number;
+    c12?: number;
+    c24?: number;
+}
+
+/**
  * Tetris - A class used to represent the game state and pieces that comprise it.
  */
 class Tetris {
@@ -609,6 +623,11 @@ class Tetris {
     private gamepad: Gamepad = null;
     private gamepadLastFrame: Gamepad = null;
     private readonly well: Well;
+
+    // Object to store commonly needed pixel locations and dimensions
+    readonly cvLocations = [1,2,3,4,6,8,12,24];
+    readonly cvHeights: CanvasDimensions;
+    readonly cvWidths: CanvasDimensions;
 
     // Objects to store individual pre-rendered minos (blocks) and full pre-rendered pieces
     private renderedMinos: Object = {
@@ -688,6 +707,13 @@ class Tetris {
     private spawnLock: boolean = false;
     private titleScreen: boolean = true;
 
+    // menu stuff
+    private pauseScreenOptions  = ["Resume", "Restart", "Options", "Quit"];
+    private titleScreenOptions  = ["Start", "Options"]
+    private startOptions        = ["Classic", "Endless", "Sprint"];
+    private pauseScreenSelectedOption: number = 0;
+    private titleScreenSelectedOption: number = 0;
+
     // graphics stuff
     /*
         COLOR ARRAY ORDER:        I, J, L, O, S, T, Z
@@ -727,13 +753,32 @@ class Tetris {
     private testRenderMinos: boolean = false;
 
     constructor() {
-        this.canvas     = document.getElementById("main-canvas") as HTMLCanvasElement;
-        this.ctx        = this.canvas.getContext('2d');
+        // setup canvas with proper scaling
+        this.canvas                 = document.getElementById("main-canvas") as HTMLCanvasElement;
+        let width                   = this.canvas.width;
+        let height                  = this.canvas.height;
+        this.canvas.style.width     = width + "px";
+        this.canvas.style.height    = height + "px";
+        this.canvas.width           *= window.devicePixelRatio;
+        this.canvas.height          *= window.devicePixelRatio;
+
+        // setup common canvas locations
+        this.cvHeights = {};
+        this.cvWidths = {};
+
+        for (let divisor of this.cvLocations){
+            this.cvHeights[`c${divisor}`] = Math.floor(this.canvas.height / divisor);
+            this.cvWidths[`c${divisor}`] = Math.floor(this.canvas.width / divisor);
+        }
+
+        // get and scale canvas
+        this.ctx                        = this.canvas.getContext('2d');
+        this.ctx.imageSmoothingEnabled  = false;
+        this.ctx.textAlign              = "center";
+        //this.ctx.scale(window.devicePixelRatio, devicePixelRatio);
+
         this.blockSize  = Math.floor(this.canvas.height / 25);
         this.well       = new Well(this);
-
-        this.ctx.imageSmoothingEnabled = false;
-
 
         // pre-render minos and pieces
         for (let pieceType of Tetromino.pieceTypes){
@@ -902,6 +947,7 @@ class Tetris {
                 if (this.overlayOpacity < 0){
                     this.overlayOpacity = 0;
                     this.pauseOverlay = false;
+                    this.pauseScreenSelectedOption = 0;
                 }
             }
         }, this.updateFrequency);
@@ -923,9 +969,12 @@ class Tetris {
             input = input.includes("Arrow") ? input.slice(5).toLowerCase() : input;
 
             if (!game.titleScreen && !game.gameOver) {
+                // Toggle Pause Keys
                 if (input === "Escape" || input === "p") {
                     game.pause();
-                } else if (game.activePiece !== null && !game.paused) {
+                }
+                // Gameplay Controls
+                else if (game.activePiece !== null && !game.paused) {
                     if (["left", "right", "down"].includes(input)) {
                         if (game.activePiece.moveLock) {
                             game.activePiece.moveQueue.enqueue(`move:${input}`);
@@ -944,6 +993,23 @@ class Tetris {
                         game.activePiece.hardDrop();
                     } else if (input === "f") {
                         game.holdPiece();
+                    }
+                }
+                // Pause Controls
+                else if (game.paused) {
+                    // todo: maybe restrict key repeat?
+                    if (input === "up") {
+                        console.log("Up While paused");
+                        game.pauseScreenSelectedOption--;
+                        game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
+                            game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+                    }
+                    else if (input === "down") {
+                        console.log("Down While paused");
+                        game.pauseScreenSelectedOption++;
+                        game.pauseScreenSelectedOption =
+                            game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
+                                game.pauseScreenSelectedOption;
                     }
                 }
             } else {
@@ -1321,26 +1387,27 @@ class Tetris {
 
     private drawUI(sinOffset: number, cosOffset: number) {
         if (!this.gameOver) {
+            let cvw = this.cvWidths;
+            let cvh = this.cvHeights;
+
             this.ctx.fillStyle = this.fontColor;
-            this.ctx.font = `1.0em "${this.gameFont}"`;
+            this.ctx.font = `${window.devicePixelRatio}em "${this.gameFont}"`;
 
             let yOffset = Math.floor(3 * Math.cos(Date.now()/600));
 
             // UI boxes
 
-            // This box positioning is a little wonky
-
             // right box
-            let rBoxWidth    = this.canvas.width/6;
-            let rBoxHeight   = ((this.blockSize+this.gridSize) * this.well.getGrid().length) + this.gridSize;
-            let rBoxX        = this.canvas.width - 1.85 * (this.canvas.width / 4 - (rBoxWidth/2));
-            let rBoxY        = (this.canvas.height / 2 - (rBoxHeight/2));
+            let rBoxWidth    = cvw.c6;
+            let rBoxHeight   = Math.floor(((this.blockSize+this.gridSize) * this.well.getGrid().length) + this.gridSize);
+            let rBoxX        = Math.floor(cvw.c1 - 1.85 * (cvw.c4 - cvw.c12));
+            let rBoxY        = (cvh.c2 - (Math.floor(rBoxHeight/2)));
 
-            // upper-left box
+            // upper-left box - ulBoxX is still a little too strange for my liking but whatever
             let ulBoxWidth    = rBoxWidth;
-            let ulBoxHeight   = (rBoxHeight - this.blockSize)/3;
+            let ulBoxHeight   = Math.floor((rBoxHeight - this.blockSize)/3);
             let ulBoxX        = (this.canvas.width / 4.5 - (ulBoxWidth/2));
-            let ulBoxY        = (this.canvas.height / 2 - (rBoxHeight/2));
+            let ulBoxY        = (cvh.c2 - (rBoxHeight/2));
 
             // bottom-left
             let blBoxWidth    = rBoxWidth;
@@ -1377,9 +1444,11 @@ class Tetris {
 
             // render text
             this.ctx.fillStyle = this.borderColor;
-            this.ctx.font = `bold 1.4em "${this.gameFont}"`;
-            let lBoxTextX = ulBoxX + (ulBoxWidth/2 - 32);
-            let lBoxTextY = ulBoxY + (rBoxHeight / 12);
+            this.ctx.font   = `${1.4 * window.devicePixelRatio}em "${this.gameFont}"`;
+            let lBoxTextX   = ulBoxX + (ulBoxWidth/2);
+            let ulBoxTextY   = ulBoxY + (rBoxHeight / 12);
+            let blTextOffset = Math.floor(rBoxHeight / 24);
+            let blBoxTextY   = blBoxY + (blTextOffset * 2);
             let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
             let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
 
@@ -1399,34 +1468,32 @@ class Tetris {
                     this.ctx.globalCompositeOperation = "source-over";
                 }
 
-                this.ctx.fillText("Next:", rBoxX + (rBoxWidth / 2 - 32),
-                    rBoxY + (rBoxHeight / 12), 64);
-                this.ctx.fillText("Hold:", lBoxTextX - i, lBoxTextY-i, 64);
+                this.ctx.fillText("Next:", rBoxX + (rBoxWidth / 2),
+                    rBoxY + (rBoxHeight / 12));
+                this.ctx.fillText("Hold:", lBoxTextX - i, ulBoxTextY-i, ulBoxWidth);
 
-                this.ctx.fillText("Score:", lBoxTextX, lBoxTextY * 3, 64);
-                this.ctx.fillText("Lines:", lBoxTextX, lBoxTextY * 3.75, 64);
-                this.ctx.fillText("Level:", lBoxTextX, lBoxTextY * 4.5, 64);
-                this.ctx.fillText("Time:", lBoxTextX, lBoxTextY * 5.25, 64);
+                this.ctx.fillText("Score:", lBoxTextX, blBoxTextY, blBoxWidth);
+                this.ctx.fillText("Lines:", lBoxTextX, blBoxTextY + (blTextOffset * 3), blBoxWidth);
+                this.ctx.fillText("Level:", lBoxTextX, blBoxTextY + (blTextOffset * 7), blBoxWidth);
+                this.ctx.fillText("Time:", lBoxTextX, blBoxTextY + (blTextOffset * 11), blBoxWidth);
 
                 this.ctx.fillStyle = i == 1 ? this.borderColor : this.ctx.fillStyle;
 
-                this.ctx.fillText(`${this.score}`, lBoxTextX, lBoxTextY * 3 + 32, 64);
-                this.ctx.fillText(`${this.linesCleared}`, lBoxTextX, lBoxTextY * 3.75 + 32, 64);
-                this.ctx.fillText(`${this.gameLevel}`, lBoxTextX, lBoxTextY * 4.5 + 32, 64);
-                this.ctx.fillText(`${mins}:${secs}`, lBoxTextX, lBoxTextY * 5.25 + 32, 64);
+                // these .25s don't seem like the solution
+                this.ctx.fillText(`${this.score}`, lBoxTextX,
+                    blBoxTextY + Math.floor((blTextOffset * 1.25)), blBoxWidth);
+                this.ctx.fillText(`${this.linesCleared}`, lBoxTextX,
+                    blBoxTextY + Math.floor((blTextOffset * 4.25)), blBoxWidth);
+                this.ctx.fillText(`${this.gameLevel}`, lBoxTextX,
+                    blBoxTextY + Math.floor((blTextOffset * 8.25)), blBoxWidth);
+                this.ctx.fillText(`${mins}:${secs}`, lBoxTextX,
+                    blBoxTextY + Math.floor((blTextOffset * 12.25)), blBoxWidth);
 
-                let canvasHalf      = Math.floor(this.canvas.width/2);
-                let canvasSixth    = Math.floor(this.canvas.width/6);
-
-
-                // todo:
-                // draw high score - should this be done differently? little rough right now
+                // draw high score
                 this.ctx.fillStyle = this.bgGradientColorString1;
-                this.ctx.fillText(`High: ${this.highScore}`, canvasHalf - Math.floor(canvasSixth/2)+1,
-                    33, canvasSixth);
+                this.ctx.fillText(`High: ${this.highScore}`, cvw.c2 + 1, (cvh.c12 + cvh.c24)/2 + 1);
                 this.ctx.fillStyle = this.borderColor;
-                this.ctx.fillText(`High: ${this.highScore}`, canvasHalf - Math.floor(canvasSixth/2),
-                    32, canvasSixth);
+                this.ctx.fillText(`High: ${this.highScore}`, cvw.c2, (cvh.c12 + cvh.c24)/2);
             }
 
             // render held piece
@@ -1474,38 +1541,64 @@ class Tetris {
         if (this.pauseOverlay){
             this.drawOverlay();
 
+            let cvw = this.cvWidths;
+            let cvh = this.cvHeights;
+
+            //this.toggleTextShadow();
             this.ctx.fillStyle = this.fontColor;
-            this.ctx.font = `3.0em "${this.gameFont}"`;
+            this.ctx.font = `${3.0 * window.devicePixelRatio}em "${this.gameFont}"`;
             this.ctx.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
-            this.ctx.fillText("Pause", this.canvas.width/3+64,
-                this.canvas.height/2, this.canvas.height/2);
+            this.ctx.fillText("Pause", cvw.c2, cvh.c3);
+
+            // draw pause menu options
+            this.ctx.font = `${1.2 * window.devicePixelRatio}em "${this.gameFont}"`;
+
+            for (let option = 0; option < this.pauseScreenOptions.length; option++) {
+                this.ctx.fillStyle =
+                    option === this.pauseScreenSelectedOption ? this.bgGradientColorString2 : this.fontColor;
+                this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
+            }
+
             this.ctx.globalAlpha = 1;
+            //this.toggleTextShadow();
         }
     }
 
     private drawGameOver(){
         this.drawOverlay()
 
+        this.toggleTextShadow();
         this.ctx.fillStyle = this.fontColor
-        this.ctx.font = `3.0em "${this.gameFont}"`;
-        this.ctx.fillText("Game Over", this.canvas.width/3+50,
-            this.canvas.height/2, this.canvas.width);
+        this.ctx.font = `${3.0 * window.devicePixelRatio}em "${this.gameFont}"`;
+        this.ctx.fillText("Game Over", this.cvWidths.c2, this.cvHeights.c3);
+        this.toggleTextShadow();
     }
 
     private drawTitle() {
+        let cvw = this.cvWidths;
+        let cvh = this.cvHeights;
+
+        this.toggleTextShadow();
+
         this.ctx.fillStyle = this.fontColor;
-        this.ctx.font = `5.0em "${this.gameFont}"`;
-        this.ctx.fillText("Tetris", 20,
-            80, this.canvas.width);
+        this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
+        this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
 
-        this.ctx.font = `1.0em "${this.gameFont}"`;
+        this.ctx.font = `${window.devicePixelRatio}em "${this.gameFont}"`;
 
-        this.ctx.fillText("Programmed by John O'Hara in 2021",
-            40, 120, this.canvas.width/2);
+        this.ctx.fillText("Press Enter to Start",cvw.c2, cvh.c3 * 2);
 
-        this.ctx.fillText("Press Enter to Start",
-            this.canvas.width/3+50, 300, this.canvas.width/2);
 
+        this.ctx.font = `${.8 * window.devicePixelRatio}em "${this.gameFont}"`;
+        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
+
+        this.toggleTextShadow();
+    }
+
+    private toggleTextShadow() {
+        this.ctx.shadowColor = this.bgGradientColorString1;
+        this.ctx.shadowBlur = this.ctx.shadowBlur === 5 ? 0 : 5;
+        this.ctx.shadowOffsetY = this.ctx.shadowOffsetY === 2 ? 0 : 2;
     }
 
     private drawOverlay(){
