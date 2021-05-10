@@ -103,7 +103,7 @@ class Tetromino {
             }
 
             if (!validSpawn){
-                this.game.stop();
+                this.game.endGame();
             }
 
             if (!isGhost) {
@@ -455,57 +455,6 @@ class Well {
         return this.grid[0].length;
     }
 
-    // TODO: Remove when I'm certain the new method is working
-    //
-    // clearLines() {
-    //     this.game.setSpawnLock(true);
-    //     let linesCleared = 0;
-    //
-    //     // how would I do something with a pause or animation on line clear?
-    //     for (let row = this.getHeight() - 1; row > 0; row--){
-    //         if (!this.grid[row].includes(0)){
-    //             // clear that line
-    //             this.grid.splice(row, 1);
-    //
-    //             let replacementRow = [];
-    //
-    //             for (let col = 0; col < this.width; col++){
-    //                 replacementRow.push(0);
-    //             }
-    //
-    //             this.grid.unshift(replacementRow);
-    //
-    //             this.game.lineClear();
-    //             linesCleared++;
-    //
-    //             // continue checking from this spot
-    //             row++;
-    //         }
-    //         /*
-    //             Here's an idea - I don't think a piece could be floating, so we could
-    //             probably stop this loop from checking the first time we hit a row of
-    //             all 0s - meaning you're now looking at the blank space above the current
-    //             structure of blocks in the well.
-    //             I could add another condition to the for loop, and then have an else-if
-    //             right above that checks if (!this.grid[row].includes(1,2,3,4,5,6,7)) or
-    //             whatever the syntax would be, then it sets a boolean to true and breaks
-    //             the loop
-    //          */
-    //     }
-    //
-    //     // handle scoring
-    //     if (linesCleared > 0){
-    //         let lineScore = (200 * linesCleared);
-    //         lineScore -= linesCleared < 4 ? 100 : 0;
-    //         lineScore *= this.game.getLevel();
-    //
-    //         console.log(`linesCleared: ${linesCleared} - lineScore: ${lineScore}`);
-    //         this.game.addScore(lineScore);
-    //     }
-    //
-    //     this.game.setSpawnLock(false);
-    // }
-
     clearLines() {
         this.game.setSpawnLock(true);
         // todo: set
@@ -600,7 +549,8 @@ class Well {
 }
 
 /**
- * CanvasDimensions - an interface to define an object to store commonly needed fractions a canvas' size
+ * CanvasDimensions - an interface to define an object to store commonly needed fractions
+ *  of a canvas size
  */
 interface CanvasDimensions {
     c1?: number;
@@ -630,6 +580,10 @@ class Tetris {
     readonly cvWidths: CanvasDimensions;
 
     // Objects to store individual pre-rendered minos (blocks) and full pre-rendered pieces
+    private renderedBackground: HTMLCanvasElement;
+    private renderedBGX: number;
+    private renderedBGY: number;
+    private renderedBGTimer: ReturnType<typeof setTimeout> = null;
     private renderedMinos: Object = {
         "I": HTMLCanvasElement,
         "J": HTMLCanvasElement,
@@ -712,7 +666,9 @@ class Tetris {
     private titleScreenOptions  = ["Start", "Options"]
     private startOptions        = ["Classic", "Endless", "Sprint"];
     private pauseScreenSelectedOption: number = 0;
+    private titleScreenPromptOpacity: number;
     private titleScreenSelectedOption: number = 0;
+    private titleScreenTransitionTimer: ReturnType<typeof setTimeout> = null;
 
     // graphics stuff
     /*
@@ -735,7 +691,12 @@ class Tetris {
     private readonly borderColor    = '#bbb';
     private readonly pauseColor     = '#000';
     private readonly gameFont       = 'Poppins';
-    private overlayFinalOpacity     = .4; // 0-1.0
+    private loadOverlayOpacityTimer: ReturnType<typeof setInterval> = null;
+    private loadOverlayFadeUp: boolean;
+    private loadOverlayLock         = false;
+    private loadOverlayOpacity      = 0;
+    private overlayBehindTheScenesComplete: boolean = false;
+    private overlayFinalOpacity     = .6; // 0-1.0
     private overlayOpacity          = 0;
     private overlayOpacityTimer: ReturnType<typeof setInterval> = null;
     private pauseOverlay: boolean;
@@ -808,6 +769,33 @@ class Tetris {
                 this.renderedMinos[pieceType], this.blockSize, this.gridSize);
         }
 
+        // render background texture?
+        this.renderedBackground = document.createElement("canvas");
+        this.renderedBackground.width = this.canvas.width * 3;
+        this.renderedBackground.height = this.canvas.height * 3;
+        let bgCtx = this.renderedBackground.getContext('2d');
+        //bgCtx.rotate(Math.PI/8);
+        let pieceArray = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
+
+        for (let row = 0; row < Math.floor(this.renderedBackground.height/(this.blockSize*4)); row++) {
+            console.log(`Row number ${row}`);
+
+            for (let col = 0; col < Math.floor(this.renderedBackground.width/(this.blockSize*4)); col++) {
+                console.log(`\tCol number ${col}`);
+                let currentPiece = pieceArray.shift();
+                pieceArray.push(currentPiece);
+
+                bgCtx.drawImage(this.renderedPieces[currentPiece], col * (this.blockSize * 5),
+                    row * (this.blockSize * 5));
+            }
+        }
+
+        //bgCtx.restore();
+
+        // configure title screen animation
+        this.renderedBGX = this.canvas.width * -2;
+        this.renderedBGY = this.canvas.height * -2;
+
         // todo: get high score from wherever it has been saved?
         let localHighScore = localStorage.getItem("highScore");
 
@@ -829,83 +817,88 @@ class Tetris {
 
             // MAIN GAME LOOP
             this.gameLoop = setInterval(() => {
-                // update loop timer
-                if (!this.paused){
-                    this.elapsedTime += Date.now() - this.previousLoopTime;
-                }
-                this.previousLoopTime = Date.now();
 
-                // check for gamepad input
-                if (this.gamepadConnected){
-                    Tetris.pollGamepad();
-                }
-
-                // DEBUG: report state current locking piece if it exists
-                if (this.activePiece !== null && this.activePiece.getLockPercentage() > 0){
-                    console.log(`activePiece locking: ${this.activePiece.getLockPercentage()}%`);
-                }
-
-                if (!this.titleScreen && !this.paused && !this.gameOver) {
-                    // check for levelup
-                    if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15){
-                        this.gameLevel++;
-
-                        if (this.activePiece !== null) {
-                            clearInterval(this.activePiece.gravity);
-                            this.activePiece.gravity = null;
-                        }
-                    }
-
-                    // check if backup piece bag is exhausted
-                    if (this.pieceBagBackup.length <= 0){
-                        this.pieceBagBackup = Tetris.newPieceBag();
-                    }
-
-                    // check if piece bag is exhausted, swap in backup if it is
-                    if (this.pieceBag.length <= 0) {
-                        this.pieceBag = this.pieceBagBackup;
-                        this.pieceBagBackup = [];
-                    }
-
-                    // clear lines that need to be cleared
-                    if (this.activePiece == null) {
-                        this.well.clearLines();
-                    }
-
-                    // create new piece if one doesn't exist
-                    if (this.activePiece == null && !this.spawnLock) {
-                        this.newPiece();
-                    }
-
-                    // give the active piece gravity if it doesn't have it
-                    if (this.activePiece !== null && this.activePiece.gravity === null){
-                        this.activePiece.gravity = setInterval(() => {
-                            if (!this.paused && !this.noGravity) {
-                                if (!this.activePiece.moveLock) {
-                                    let falling = this.activePiece.move("gravity");
-
-                                    if (!falling) {
-                                        //this.well.lockPiece(this.activePiece);
-                                    }
-                                }
-                                else {
-                                    this.activePiece.moveQueue.enqueue(`move:gravity`);
-                                }
-                            }
-                        }, (this.updateFrequency / this.gameSpeed[this.gameLevel]));
-                    }
-
-                    this.updateHighScore();
-                }
-                else if (this.gameOver){
-                    // todo: GAME OVER STATE - is this where it's mainly handled?
-                    this.updateHighScore(true);
-                    this.drawGameOver();
-                }
-                else if (this.titleScreen) {
+                if (this.titleScreen){
+                    // title screen state
                     this.drawTitle();
                 }
+                else if (this.gameOver) {
+                    // game over state
+                    //this.updateHighScore(true);
+                    this.drawGameOver();
+                }
+                else {
+                    // in-game state
 
+                    // update loop timer
+                    if (!this.paused) {
+                        this.previousLoopTime = isNaN(this.previousLoopTime) ? Date.now() : this.previousLoopTime;
+                        this.elapsedTime += Date.now() - this.previousLoopTime;
+                    }
+                    this.previousLoopTime = Date.now();
+
+                    // check for gamepad input
+                    if (this.gamepadConnected) {
+                        Tetris.pollGamepad();
+                    }
+
+                    // DEBUG: report state current locking piece if it exists
+                    if (this.activePiece !== null && this.activePiece.getLockPercentage() > 0) {
+                        console.log(`activePiece locking: ${this.activePiece.getLockPercentage()}%`);
+                    }
+
+                    if (!this.titleScreen && !this.paused && !this.gameOver) {
+                        // check for levelup
+                        if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15) {
+                            this.gameLevel++;
+
+                            if (this.activePiece !== null) {
+                                clearInterval(this.activePiece.gravity);
+                                this.activePiece.gravity = null;
+                            }
+                        }
+
+                        // check if backup piece bag is exhausted
+                        if (this.pieceBagBackup.length <= 0) {
+                            this.pieceBagBackup = Tetris.newPieceBag();
+                        }
+
+                        // check if piece bag is exhausted, swap in backup if it is
+                        if (this.pieceBag.length <= 0) {
+                            this.pieceBag = this.pieceBagBackup;
+                            this.pieceBagBackup = [];
+                        }
+
+                        // clear lines that need to be cleared
+                        if (this.activePiece == null) {
+                            this.well.clearLines();
+                        }
+
+                        // create new piece if one doesn't exist
+                        if (this.activePiece == null && !this.spawnLock) {
+                            this.newPiece();
+                        }
+
+                        // give the active piece gravity if it doesn't have it
+                        if (this.activePiece !== null && this.activePiece.gravity === null) {
+                            this.activePiece.gravity = setInterval(() => {
+                                if (!this.paused && !this.noGravity) {
+                                    if (!this.activePiece.moveLock) {
+                                        let falling = this.activePiece.move("gravity");
+
+                                        if (!falling) {
+                                            //this.well.lockPiece(this.activePiece);
+                                        }
+                                    } else {
+                                        this.activePiece.moveQueue.enqueue(`move:gravity`);
+                                    }
+                                }
+                            }, (this.updateFrequency / this.gameSpeed[this.gameLevel]));
+                        }
+
+                        this.updateHighScore();
+                    }
+                }
                 // render board
                 this.draw();
             }, this.updateFrequency);
@@ -915,42 +908,64 @@ class Tetris {
         }
     }
 
-    // todo: Make this more of a game-over state
-    stop(): void {
+    endGame(quitToTitle: boolean = false, restart: boolean = false): void {
         if (this.running) {
+            // set proper state
             this.gameOver = true;
-            //this.running = false;
-            //clearInterval(this.gameLoop);
-            //document.removeEventListener("keydown", Tetris.pollInput);
+            this.titleScreen = quitToTitle;
+            this.updateHighScore(true);
+
+
+            // reset game pieces
+            clearInterval(this.activePiece.gravity);
+            this.activePiece.gravity = null;
+            this.activePiece = null;
+            this.elapsedTime = 0;
+            this.linesCleared = 0;
+            this.gameLevel = 0;
+            this.ghostPiece = null;
+            this.heldPiece = null;
+            this.pieceBag = [];
+            this.pieceBagBackup = [];
+            this.score = 0;
+            this.well.resetWell();
+
+            if (restart) {
+                // so is this how I'm restarting the game?
+                this.newGame();
+                this.pause();
+            }
         } else {
             console.log("Game isn't running.");
         }
     }
 
     // todo: have a pause menu controllable by arrow keys
-    pause(): void {
+    pause(skipFade: boolean = false): void {
         this.paused = !this.paused;
-        this.pauseOverlay = true;
+        this.pauseOverlay = !skipFade;
         console.log(`game ${this.paused ? "paused" : "unpaused"}`);
 
         clearInterval(this.overlayOpacityTimer);
         this.overlayOpacityTimer = null;
 
-        this.overlayOpacityTimer = setInterval(() => {
-            let direction = this.paused ? 1 : -1;
-            this.overlayOpacity += direction * (this.overlayFinalOpacity / 8);
+        if (!skipFade) {
+            this.overlayOpacityTimer = setInterval(() => {
+                let direction = this.paused ? 1 : -1;
+                this.overlayOpacity += direction * (this.overlayFinalOpacity / 8);
 
-            if (this.overlayOpacity > this.overlayFinalOpacity ||this.overlayOpacity < 0){
-                clearInterval(this.overlayOpacityTimer);
-                this.overlayOpacityTimer = null;
+                if (this.overlayOpacity > this.overlayFinalOpacity || this.overlayOpacity < 0) {
+                    clearInterval(this.overlayOpacityTimer);
+                    this.overlayOpacityTimer = null;
 
-                if (this.overlayOpacity < 0){
-                    this.overlayOpacity = 0;
-                    this.pauseOverlay = false;
-                    this.pauseScreenSelectedOption = 0;
+                    if (this.overlayOpacity < 0) {
+                        this.overlayOpacity = 0;
+                        this.pauseOverlay = false;
+                        this.pauseScreenSelectedOption = 0;
+                    }
                 }
-            }
-        }, this.updateFrequency);
+            }, this.updateFrequency);
+        }
     }
 
     private static pollInput(event: KeyboardEvent = null, input: string = null, gamepadSource: boolean = false): void {
@@ -997,7 +1012,7 @@ class Tetris {
                 }
                 // Pause Controls
                 else if (game.paused) {
-                    // todo: maybe restrict key repeat?
+                    // navigate pause menu - todo: maybe restrict key repeat?
                     if (input === "up") {
                         console.log("Up While paused");
                         game.pauseScreenSelectedOption--;
@@ -1010,6 +1025,23 @@ class Tetris {
                         game.pauseScreenSelectedOption =
                             game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
                                 game.pauseScreenSelectedOption;
+                    }
+
+                    // confirm pause menu option
+                    else if (input === "Enter") {
+                        let option = game.pauseScreenOptions[game.pauseScreenSelectedOption];
+
+                        if (option === "Resume") {
+                            game.pause();
+                        }
+                        else if (option === "Restart") {
+                            game.pauseScreenSelectedOption = 0;
+                            game.restartGame();
+                        }
+                        else if (option === "Quit") {
+                            game.pauseScreenSelectedOption = 0;
+                            game.quitToTitle();
+                        }
                     }
                 }
             } else {
@@ -1087,12 +1119,14 @@ class Tetris {
         console.log(`Gamepad[${game.gamepadIndex}] ${connected? "" : "dis"}connected`);
     }
 
+    // what's up with this vs the state reset in endGame? should I keep part of this?
     private newGame(): void{
         this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
         this.gameOver = false;
         this.linesCleared = 0;
+        this.overlayOpacity = 0;
         this.score = 0;
         this.titleScreen = false;
         this.well.resetWell();
@@ -1219,8 +1253,11 @@ class Tetris {
         // draw UI
         this.drawUI(sinOffset, cosOffset);
 
-        // finally, draw pause overlay if necessary
+        // draw pause overlay if necessary
         this.drawPause();
+
+        // finally, draw loading overlay if necessary
+        this.drawLoadOverlay();
     }
 
     private drawBackground(sinOffset: number, cosOffset: number) {
@@ -1575,6 +1612,23 @@ class Tetris {
     }
 
     private drawTitle() {
+        // todo: Fix background animation - what's up with that stuttered jump?
+        if (this.renderedBGTimer === null) {
+            this.renderedBGTimer = setInterval(() => {
+                this.titleScreenPromptOpacity = (Math.cos(Date.now()/250) + 2)/3;
+                this.renderedBGX -= this.renderedBGX >= this.canvas.width * -1 + (this.blockSize/3) ?
+                    this.canvas.width - this.blockSize : 0;
+                //this.renderedBGX += 1;
+                //this.renderedBGY += 1;
+                this.renderedBGY = this.renderedBGY >= this.canvas.height * -1 ?
+                    this.canvas.height * -2 : this.renderedBGY;
+            }, this.updateFrequency/3);
+        }
+
+        this.ctx.globalAlpha = .2;
+        this.ctx.drawImage(this.renderedBackground, this.renderedBGX, this.renderedBGY);
+        this.ctx.globalAlpha = 1;
+
         let cvw = this.cvWidths;
         let cvh = this.cvHeights;
 
@@ -1586,7 +1640,9 @@ class Tetris {
 
         this.ctx.font = `${window.devicePixelRatio}em "${this.gameFont}"`;
 
+        this.ctx.globalAlpha = this.titleScreenPromptOpacity;
         this.ctx.fillText("Press Enter to Start",cvw.c2, cvh.c3 * 2);
+        this.ctx.globalAlpha = 1;
 
 
         this.ctx.font = `${.8 * window.devicePixelRatio}em "${this.gameFont}"`;
@@ -1601,11 +1657,80 @@ class Tetris {
         this.ctx.shadowOffsetY = this.ctx.shadowOffsetY === 2 ? 0 : 2;
     }
 
-    private drawOverlay(){
+    private drawOverlay() {
         this.ctx.globalAlpha = this.overlayOpacity;
         this.ctx.fillStyle = this.pauseColor;
         this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
         this.ctx.globalAlpha = 1;
+    }
+
+    // todo: use this for all state transitions, making use of this.loadOverlayLock
+    //  also - what does overlayBehindTheScenesComplete mean now?
+    private drawLoadOverlay() {
+        if (this.loadOverlayOpacityTimer !== null) {
+            console.log(`loadOverlayOpacity: ${this.loadOverlayOpacity}`);
+        }
+
+        // This seems to fix the stutter bug - it was a very small negative opacity
+        // that was causing it.
+        if (this.loadOverlayOpacity >= 0) {
+            this.ctx.globalAlpha = this.loadOverlayOpacity;
+            this.ctx.globalAlpha = this.ctx.globalAlpha <= 0 ? 0 : this.ctx.globalAlpha;
+            this.ctx.globalAlpha = this.ctx.globalAlpha >= 1 ? 1 : this.ctx.globalAlpha;
+            this.ctx.fillStyle = this.pauseColor;   // maybe customize this further?
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.globalAlpha = 1;
+        }
+    }
+
+    private fadeOverlayToBlack() {
+        if (this.loadOverlayOpacityTimer === null) {
+            this.loadOverlayFadeUp = true;
+            this.loadOverlayLock = true;
+            this.overlayBehindTheScenesComplete = false;
+
+            this.loadOverlayOpacityTimer = setInterval((transition) => {
+                this.loadOverlayFadeUp = this.loadOverlayOpacity >= 1 ? false : this.loadOverlayFadeUp;
+
+                if (this.loadOverlayFadeUp) {
+                    this.loadOverlayOpacity += .05;
+                }
+                else if (this.overlayBehindTheScenesComplete) {
+                    if (this.loadOverlayOpacity <= 0) {
+                        clearInterval(this.loadOverlayOpacityTimer);
+                        this.loadOverlayOpacityTimer = null;
+                        this.loadOverlayOpacity = 0;
+                    }
+                    else {
+                        this.loadOverlayOpacity -= .05;
+                    }
+                }
+            }, this.updateFrequency);
+        }
+    }
+
+    private quitToTitle() {
+        this.pause();
+        this.fadeOverlayToBlack();
+
+        if (this.titleScreenTransitionTimer === null) {
+            this.titleScreenTransitionTimer = setInterval(() => {
+                if (!this.loadOverlayFadeUp) {
+                    console.log("Reached final quitToTitle state");
+                    // transition to title
+                    this.endGame(true);
+
+
+                    this.overlayBehindTheScenesComplete = true;
+                    clearInterval(this.titleScreenTransitionTimer);
+                    this.titleScreenTransitionTimer = null;
+                }
+            }, this.updateFrequency);
+        }
+    }
+
+    private restartGame() {
+        this.endGame(false, true);
     }
 
     private static renderMinos(pieceType: string, canvas: HTMLCanvasElement,
@@ -1665,22 +1790,6 @@ class Tetris {
             let yPos = gridSize + (blockCoords[0] * (blockSize + gridSize));
 
             ctx.drawImage(mino, xPos, yPos);
-
-            // old way
-            /*
-            ctx.fillStyle = color;
-            ctx.fillRect(xPos, yPos, blockSize, blockSize);
-
-            let colorGradient = ctx.createLinearGradient(xPos + 4, yPos + 4,
-                xPos + blockSize - 4, yPos + blockSize - 4);
-
-            colorGradient.addColorStop(0,'rgba(255,255,255,0.45)');
-            colorGradient.addColorStop(0.4,'rgba(255,255,255,0.15)');
-            colorGradient.addColorStop(.65, `rgba(64,64,64,0)`);
-
-            ctx.fillStyle = colorGradient;
-            ctx.fillRect(xPos + 1, yPos + 1, blockSize - 2, blockSize - 2);
-             */
         }
     }
 
@@ -1714,6 +1823,6 @@ let game: Tetris;
 window.addEventListener('load', (event) => {
     game = new Tetris();
     document.getElementById("start-button").addEventListener("click",() => game.start());
-    document.getElementById("stop-button").addEventListener("click",() => game.stop());
+    document.getElementById("stop-button").addEventListener("click",() => game.endGame());
     document.getElementById("build-timestamp").innerText = document.lastModified;
 });
