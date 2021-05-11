@@ -9,7 +9,7 @@ A browser-based tetris clone made in TypeScript.
 
 ## Structure
 
-The project structure is a little jumbled right now - all of the relevant classes for the game are contained in the same file, `tetris.ts`. From top to bottom you've got classes for `Tetromino`, `Well`, and `Tetris`.
+The project structure is a little jumbled right now - all the relevant classes for the game are contained in the same file, `tetris.ts`. From top to bottom you've got classes for `Tetromino`, `Well`, and `Tetris`.
 
 To compile, just run `tsc tetris.ts`. `index.html` looks for the resulting `tetris.js`.
 
@@ -33,16 +33,13 @@ Because JS and TS are super weird about how `this` works, some methods relating 
 
 ## Todo / Bugs:
 
-- Rotation isn't completely identical to how Tetris actually plays - some rotations that are partially obstructed (such as horizontally by the well or vertically by the block tower) won't be allowed. Noticeable when pieces are locking.
-- Locking bug - there's a bug that seems to happen on faster levels (>9) with certain pieces during the lock delay. Sometimes the lock delay never clears and all future spawned pieces immediately start locking upon being created
-    - This seems to happen more frequently when held pieces are swapped for pieces that are in the lock delay state
-- Random minor woes with intervals not properly clearing
-- Implement high score logging
+- Scoring/levelup messaging - have a "Line Clear!" type message scroll up the screen and stay visible for a few ms after a given event
 - Improve menus
+- Implement more robust high score logging
 - Implement non-Chrome gamepad support
-- Improve gamepad controls - should pieces be allowed to immediately harddrop after horizontal movement, or should that have a delay to 
+- Improve gamepad controls - should pieces be allowed to immediately harddrop after horizontal movement, or should that have a delay to
+- Random minor woes with intervals not properly clearing
 prevent that from happening accidentally?
-- Line clear animation
 - Level up animation
 - Animate score increases? (increment score over period of time?)
 
