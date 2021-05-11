@@ -56,7 +56,7 @@ var Tetromino = /** @class */ (function () {
             piece.removeLockDelay();
             piece.well.lockPiece(piece);
         }
-        else {
+        else if (!game.isPaused()) {
             piece.lockPercentage += 100 / 30;
         }
     };
@@ -78,7 +78,7 @@ var Tetromino = /** @class */ (function () {
             var keepDroppin = true;
             var dropScore = 0;
             do {
-                keepDroppin = this.move("down", true);
+                keepDroppin = this.move("down");
                 dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
             } while (keepDroppin);
             if (!this.isGhost) {
@@ -166,9 +166,8 @@ var Tetromino = /** @class */ (function () {
         this.nextMove();
         return validMove;
     };
-    Tetromino.prototype.move = function (direction, hardDrop) {
+    Tetromino.prototype.move = function (direction) {
         var _this = this;
-        if (hardDrop === void 0) { hardDrop = false; }
         if (this.lockPercentage > 0 && direction === "down") {
             this.lockPercentage = 100;
             return false;
@@ -647,6 +646,7 @@ var Tetris = /** @class */ (function () {
             this.running = true;
             // add controls
             document.addEventListener("keydown", Tetris.pollInput);
+            document.addEventListener("keyup", Tetris.clearLastFrameAction);
             window.addEventListener("gamepadconnected", function (e) { return Tetris.setupGamepad(e, true); });
             window.addEventListener("gamepaddisconnected", function (e) { return Tetris.setupGamepad(e, false); });
             //this.newGame();
@@ -786,6 +786,9 @@ var Tetris = /** @class */ (function () {
             }, this.updateFrequency);
         }
     };
+    Tetris.prototype.isPaused = function () {
+        return this.paused;
+    };
     Tetris.pollInput = function (event, input, gamepadSource) {
         //console.log(`event: ${event}, input: ${input}`);
         if (event === void 0) { event = null; }
@@ -833,19 +836,27 @@ var Tetris = /** @class */ (function () {
                 }
                 // Pause Controls
                 else if (game.paused) {
-                    // navigate pause menu - todo: maybe restrict key repeat?
+                    // navigate pause menu
+                    // game.lastFrameAction is a very rudimentary way of halving repeat speed
+                    // ....and it's not working.
                     if (input === "up") {
                         console.log("Up While paused");
-                        game.pauseScreenSelectedOption--;
-                        game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
-                            game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+                        if (game.lastFrameAction !== "up") {
+                            game.pauseScreenSelectedOption--;
+                            game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
+                                game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+                        }
+                        game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
                     }
                     else if (input === "down") {
                         console.log("Down While paused");
-                        game.pauseScreenSelectedOption++;
-                        game.pauseScreenSelectedOption =
-                            game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
-                                game.pauseScreenSelectedOption;
+                        if (game.lastFrameAction !== "down") {
+                            game.pauseScreenSelectedOption++;
+                            game.pauseScreenSelectedOption =
+                                game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
+                                    game.pauseScreenSelectedOption;
+                        }
+                        game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
                     }
                     // confirm pause menu option
                     else if (input === "Enter") {
@@ -898,6 +909,9 @@ var Tetris = /** @class */ (function () {
                 }
             }
         }
+    };
+    Tetris.clearLastFrameAction = function () {
+        game.lastFrameAction = null;
     };
     Tetris.pollGamepad = function () {
         if (game.gamepadConnected && game.gamepad !== null) {
@@ -1415,16 +1429,20 @@ var Tetris = /** @class */ (function () {
             }, this.updateFrequency);
         }
     };
-    Tetris.prototype.quitToTitle = function () {
+    Tetris.prototype.quitToTitle = function (quickRestart) {
         var _this = this;
-        this.pause();
+        if (quickRestart === void 0) { quickRestart = false; }
+        if (!quickRestart) {
+            this.pause();
+        }
         this.fadeOverlayToBlack();
         if (this.titleScreenTransitionTimer === null) {
             this.titleScreenTransitionTimer = setInterval(function () {
                 if (!_this.loadOverlayFadeUp) {
                     console.log("Reached final quitToTitle state");
                     // transition to title
-                    _this.endGame(true);
+                    //this.endGame(true);
+                    _this.endGame(!quickRestart, quickRestart);
                     _this.overlayBehindTheScenesComplete = true;
                     clearInterval(_this.titleScreenTransitionTimer);
                     _this.titleScreenTransitionTimer = null;
@@ -1433,7 +1451,9 @@ var Tetris = /** @class */ (function () {
         }
     };
     Tetris.prototype.restartGame = function () {
-        this.endGame(false, true);
+        //this.pause();
+        //this.endGame(false, true);
+        this.quitToTitle(true);
     };
     Tetris.renderMinos = function (pieceType, canvas, blockSize, color) {
         if (!Tetromino.pieceTypes.includes(pieceType)) {
@@ -1512,7 +1532,5 @@ var Tetris = /** @class */ (function () {
 var game;
 window.addEventListener('load', function (event) {
     game = new Tetris();
-    document.getElementById("start-button").addEventListener("click", function () { return game.start(); });
-    document.getElementById("stop-button").addEventListener("click", function () { return game.endGame(); });
     document.getElementById("build-timestamp").innerText = document.lastModified;
 });

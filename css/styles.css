@@ -31,10 +31,6 @@ button:hover {
   cursor: pointer;
 }
 
-p#game-buttons {
-  display: none;
-}
-
 div#content-wrapper {
   align-items: stretch;
   display: flex;

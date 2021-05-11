@@ -115,7 +115,7 @@ class Tetromino {
     }
 
     private static lockDelayTimer(piece: Tetromino) {
-        if (piece.lockPercentage > 99){ // we seem to get 99.99999... instead of 100 at the end
+        if (piece.lockPercentage > 99) { // we seem to get 99.99999... instead of 100 at the end
             //console.log(`Resolving lock delay on ${piece} - lockPercentage: ${piece.lockPercentage}`);
             piece.lockPercentage = 0;
 
@@ -124,7 +124,8 @@ class Tetromino {
             //piece.lockDelay = null;
             piece.removeLockDelay();
             piece.well.lockPiece(piece);
-        } else {
+        }
+        else if (!game.isPaused()) {
             piece.lockPercentage += 100/30;
         }
     }
@@ -151,7 +152,7 @@ class Tetromino {
             let dropScore = 0;
 
             do {
-                keepDroppin = this.move("down", true);
+                keepDroppin = this.move("down");
                 dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
             } while (keepDroppin);
 
@@ -259,7 +260,7 @@ class Tetromino {
         return validMove;
     }
 
-    move(direction: string, hardDrop: boolean = false): boolean {
+    move(direction: string): boolean {
         if (this.lockPercentage > 0 && direction === "down"){
             this.lockPercentage = 100;
             return false;
@@ -580,7 +581,7 @@ class Tetris {
     readonly cvWidths: CanvasDimensions;
 
     // Objects to store individual pre-rendered minos (blocks) and full pre-rendered pieces
-    private renderedBackground: HTMLCanvasElement;
+    private readonly renderedBackground: HTMLCanvasElement;
     private renderedBGX: number;
     private renderedBGY: number;
     private renderedBGTimer: ReturnType<typeof setTimeout> = null;
@@ -650,6 +651,7 @@ class Tetris {
     private heldPiece: Tetromino = null;
     private highScore: number;
     private holdLock: boolean = false;
+    private lastFrameAction: string;
     private linesCleared: number;
     private paused: boolean;
     private pieceBag: string[] = [];
@@ -810,6 +812,7 @@ class Tetris {
 
             // add controls
             document.addEventListener("keydown", Tetris.pollInput);
+            document.addEventListener("keyup", Tetris.clearLastFrameAction);
             window.addEventListener("gamepadconnected", (e) => Tetris.setupGamepad(e,true));
             window.addEventListener("gamepaddisconnected", (e) => Tetris.setupGamepad(e, false));
 
@@ -968,6 +971,10 @@ class Tetris {
         }
     }
 
+    isPaused(): boolean {
+        return this.paused;
+    }
+
     private static pollInput(event: KeyboardEvent = null, input: string = null, gamepadSource: boolean = false): void {
         //console.log(`event: ${event}, input: ${input}`);
 
@@ -1012,21 +1019,32 @@ class Tetris {
                 }
                 // Pause Controls
                 else if (game.paused) {
-                    // navigate pause menu - todo: maybe restrict key repeat?
+                    // navigate pause menu
+                    // game.lastFrameAction is a very rudimentary way of halving repeat speed
+                    // ....and it's not working.
                     if (input === "up") {
                         console.log("Up While paused");
-                        game.pauseScreenSelectedOption--;
-                        game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
-                            game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+
+                        if (game.lastFrameAction !== "up") {
+                            game.pauseScreenSelectedOption--;
+                            game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
+                                game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+                        }
+
+                        game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
                     }
                     else if (input === "down") {
                         console.log("Down While paused");
-                        game.pauseScreenSelectedOption++;
-                        game.pauseScreenSelectedOption =
-                            game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
-                                game.pauseScreenSelectedOption;
-                    }
 
+                        if (game.lastFrameAction !== "down") {
+                            game.pauseScreenSelectedOption++;
+                            game.pauseScreenSelectedOption =
+                                game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
+                                    game.pauseScreenSelectedOption;
+                        }
+
+                        game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
+                    }
                     // confirm pause menu option
                     else if (input === "Enter") {
                         let option = game.pauseScreenOptions[game.pauseScreenSelectedOption];
@@ -1078,6 +1096,10 @@ class Tetris {
                 }
             }
         }
+    }
+
+    private static clearLastFrameAction() {
+        game.lastFrameAction = null;
     }
 
     private static pollGamepad(){
@@ -1709,8 +1731,11 @@ class Tetris {
         }
     }
 
-    private quitToTitle() {
-        this.pause();
+    private quitToTitle(quickRestart: boolean = false) {
+        if (!quickRestart) {
+            this.pause();
+        }
+
         this.fadeOverlayToBlack();
 
         if (this.titleScreenTransitionTimer === null) {
@@ -1718,7 +1743,8 @@ class Tetris {
                 if (!this.loadOverlayFadeUp) {
                     console.log("Reached final quitToTitle state");
                     // transition to title
-                    this.endGame(true);
+                    //this.endGame(true);
+                    this.endGame(!quickRestart, quickRestart);
 
 
                     this.overlayBehindTheScenesComplete = true;
@@ -1730,7 +1756,9 @@ class Tetris {
     }
 
     private restartGame() {
-        this.endGame(false, true);
+        //this.pause();
+        //this.endGame(false, true);
+        this.quitToTitle(true);
     }
 
     private static renderMinos(pieceType: string, canvas: HTMLCanvasElement,
@@ -1822,7 +1850,5 @@ let game: Tetris;
 
 window.addEventListener('load', (event) => {
     game = new Tetris();
-    document.getElementById("start-button").addEventListener("click",() => game.start());
-    document.getElementById("stop-button").addEventListener("click",() => game.endGame());
     document.getElementById("build-timestamp").innerText = document.lastModified;
 });
