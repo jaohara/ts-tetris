@@ -514,6 +514,20 @@ class Well {
                             lineScore -= this.rowsClearing.length < 4 ? 100 : 0;
                             lineScore *= this.game.getLevel();
 
+                            let scoreMessage: string;
+
+                            // todo: This can be more terse, right?
+                            if (this.rowsClearing.length < 4 && this.rowsClearing.length > 0) {
+                                scoreMessage = `LINE CLEAR x${this.rowsClearing.length}`;
+                            }
+                            else {
+                                scoreMessage = "TETRIS! ";
+                            }
+
+                            scoreMessage += ` +${lineScore}`;
+
+                            this.game.addMessage(scoreMessage, this.rowsClearing.length === 4);
+
                             console.log(`linesCleared: ${this.rowsClearing.length} - lineScore: ${lineScore}`);
 
                             // reset the row clear animation
@@ -549,6 +563,125 @@ class Well {
     }
 }
 
+interface ScoreMessage {
+    ascentFrames: number;
+    borderColors?: number[];
+    fadeFrames: number;
+    flashFrames: number;
+    message: string;
+    opacity: number;
+    prettyBorder: boolean;
+}
+
+/**
+ * ScoreMessenger - a class used to represent an object that handles the lifecycle of dynamic
+ * score messages.
+ */
+class ScoreMessenger {
+    private readonly canvasCenter: number;
+    private readonly colorArray: string[];
+    private readonly ctx: CanvasRenderingContext2D;
+    private readonly font: string;
+    private messageColor: string;
+    private messages: ScoreMessage[] = [];
+    private targetLocation: number;
+
+    constructor(ctx: CanvasRenderingContext2D, targetLocation: number, canvasCenter: number,
+                colorArray: string[], font: string = "Poppins", messageColor: string = "#bbb") {
+        this.canvasCenter   = canvasCenter;
+        this.colorArray     = colorArray;
+        this.ctx            = ctx;
+        this.font           = font;
+        this.targetLocation = targetLocation;
+        this.messageColor   = messageColor;
+    }
+
+    addMessage(message: string, prettyBorder: boolean = false) {
+        // should I have these be more customizable?
+        let newMessage: ScoreMessage = {
+            ascentFrames: 20,
+            borderColors: [1,2,3,4,5,6,7],
+            fadeFrames: 30,
+            flashFrames: 30,
+            message: message.toUpperCase(),
+            opacity: 0,
+            prettyBorder: prettyBorder
+        }
+
+        this.messages.push(newMessage);
+    }
+
+    drawMessages() {
+        if (this.messages.length > 0) {
+            //let previousFont = this.ctx.font;
+            //this.ctx.font = `${.6 * window.devicePixelRatio}em bold "${this.font}"`;
+            this.ctx.font = `${.6 * window.devicePixelRatio}em bold "${this.font}"`;
+            console.log(this.ctx.font);
+            let finishedMessages: number[] = [];
+
+            for (let messageIndex in this.messages) {
+                let message = this.messages[messageIndex];
+                let evenFrame = (message.flashFrames + message.ascentFrames) % 2 === 0;
+
+
+                // fade up
+                if (message.opacity < 1) {
+                    message.opacity += 1 / message.fadeFrames;
+                    message.opacity = message.opacity > 1 ? 1 : message.opacity;
+                }
+
+                this.ctx.globalAlpha = message.opacity;
+
+                if (message.prettyBorder) {
+                    this.ctx.fillStyle = this.colorArray[message.borderColors[0]];
+
+                    // now draw the text, offset by (+1, +1)
+                    if (message.ascentFrames > 0 || evenFrame) {
+                        this.ctx.fillText(message.message, this.canvasCenter + 1,
+                            this.targetLocation + (message.ascentFrames * 3) + 1);
+                    }
+
+                    if (evenFrame) {
+                        message.borderColors.push(message.borderColors.shift());
+                    }
+                }
+
+                if (message.ascentFrames > 0 || evenFrame) {
+                    this.ctx.fillStyle = this.messageColor;
+                    this.ctx.fillText(message.message, this.canvasCenter,
+                        this.targetLocation + (message.ascentFrames * 3));
+                    this.ctx.globalAlpha = 1;
+                }
+
+                message.ascentFrames -= message.ascentFrames > 0 ? 1 : 0;
+                message.flashFrames  -= message.flashFrames > 0 && message.ascentFrames === 0 ? 1 : 0;
+
+                if (message.ascentFrames + message.flashFrames === 0) {
+                    finishedMessages.push(parseInt(messageIndex));
+                }
+            }
+
+            if (finishedMessages.length > 0) {
+                this.pruneMessages(finishedMessages);
+            }
+
+            //this.ctx.font = previousFont;
+        }
+    }
+
+    clearMessages() {
+        this.messages = [];
+    }
+
+    private pruneMessages(messageIndices: number[] = []) {
+        if (messageIndices.length > 0) {
+            for (let index of messageIndices) {
+                this.messages.splice(index, 1);
+            }
+        }
+    }
+}
+
 /**
  * CanvasDimensions - an interface to define an object to store commonly needed fractions
  *  of a canvas size
@@ -573,6 +706,7 @@ class Tetris {
     private ctx: CanvasRenderingContext2D;
     private gamepad: Gamepad = null;
     private gamepadLastFrame: Gamepad = null;
+    private readonly messenger: ScoreMessenger;
     private readonly well: Well;
 
     // Object to store commonly needed pixel locations and dimensions
@@ -621,7 +755,7 @@ class Tetris {
         "e", "n", "Enter"
     ];
 
-    private readonly debugControls = ["0", "9", "8", "7", "6", "PageUp", "PageDown"];
+    private readonly debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown"];
 
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these
@@ -803,6 +937,9 @@ class Tetris {
 
         this.highScore = localHighScore !== null ? parseInt(localHighScore) : 16000;
 
+        // setup ScoreMessenger
+        this.messenger = new ScoreMessenger(this.ctx, this.cvHeights.c3, this.cvWidths.c2, this.colorArray);
+
         this.start();
     }
 
@@ -854,6 +991,11 @@ class Tetris {
                         // check for levelup
                         if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15) {
                             this.gameLevel++;
+
+                            // stagger message so it isn't simultaneous with line clear
+                            setTimeout(() => {
+                                this.addMessage(`Level Up! ${this.gameLevel}`);
+                            }, 300)
 
                             if (this.activePiece !== null) {
                                 clearInterval(this.activePiece.gravity);
@@ -1086,6 +1228,9 @@ class Tetris {
             else if (input === "6") {
                 game.pieceGlow = !game.pieceGlow;
             }
+            else if (input === "5") {
+                game.messenger.addMessage("Test message!", true);
+            }
             else if (input === "PageUp") {
                 game.linesCleared += 10;
             }
@@ -1243,6 +1388,10 @@ class Tetris {
         this.highScore = this.score > this.highScore ? this.score : this.highScore;
     }
 
+    addMessage(message: string, prettyBorder: boolean = false): void {
+        this.messenger.addMessage(message, prettyBorder);
+    }
+
     getLevel(): number{
         return this.gameLevel;
     }
@@ -1274,6 +1423,9 @@ class Tetris {
 
         // draw UI
         this.drawUI(sinOffset, cosOffset);
+
+        // draw messages
+        this.messenger.drawMessages();
 
         // draw pause overlay if necessary
         this.drawPause();

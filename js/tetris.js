@@ -440,6 +440,16 @@ var Well = /** @class */ (function () {
                             var lineScore = (200 * _this.rowsClearing.length);
                             lineScore -= _this.rowsClearing.length < 4 ? 100 : 0;
                             lineScore *= _this.game.getLevel();
+                            var scoreMessage = void 0;
+                            // todo: This can be more terse, right?
+                            if (_this.rowsClearing.length < 4 && _this.rowsClearing.length > 0) {
+                                scoreMessage = "LINE CLEAR x" + _this.rowsClearing.length;
+                            }
+                            else {
+                                scoreMessage = "TETRIS! ";
+                            }
+                            scoreMessage += " +" + lineScore;
+                            _this.game.addMessage(scoreMessage, _this.rowsClearing.length === 4);
                             console.log("linesCleared: " + _this.rowsClearing.length + " - lineScore: " + lineScore);
                             // reset the row clear animation
                             _this.clearAnimationCompleting = false;
@@ -468,6 +478,93 @@ var Well = /** @class */ (function () {
         this.game.lockActivePiece();
     };
     return Well;
+}());
+/**
+ * ScoreMessenger - a class used to represent an object that handles the lifecycle of dynamic
+ * score messages.
+ */
+var ScoreMessenger = /** @class */ (function () {
+    function ScoreMessenger(ctx, targetLocation, canvasCenter, colorArray, font, messageColor) {
+        if (font === void 0) { font = "Poppins"; }
+        if (messageColor === void 0) { messageColor = "#bbb"; }
+        this.messages = [];
+        this.canvasCenter = canvasCenter;
+        this.colorArray = colorArray;
+        this.ctx = ctx;
+        this.font = font;
+        this.targetLocation = targetLocation;
+        this.messageColor = messageColor;
+    }
+    ScoreMessenger.prototype.addMessage = function (message, prettyBorder) {
+        if (prettyBorder === void 0) { prettyBorder = false; }
+        // should I have these be more customizable?
+        var newMessage = {
+            ascentFrames: 20,
+            borderColors: [1, 2, 3, 4, 5, 6, 7],
+            fadeFrames: 30,
+            flashFrames: 30,
+            message: message.toUpperCase(),
+            opacity: 0,
+            prettyBorder: prettyBorder
+        };
+        this.messages.push(newMessage);
+    };
+    ScoreMessenger.prototype.drawMessages = function () {
+        if (this.messages.length > 0) {
+            //let previousFont = this.ctx.font;
+            //this.ctx.font = `${.6 * window.devicePixelRatio}em bold "${this.font}"`;
+            this.ctx.font = .6 * window.devicePixelRatio + "em bold \"" + this.font + "\"";
+            console.log(this.ctx.font);
+            var finishedMessages = [];
+            for (var messageIndex in this.messages) {
+                var message = this.messages[messageIndex];
+                var evenFrame = (message.flashFrames + message.ascentFrames) % 2 === 0;
+                // fade up
+                if (message.opacity < 1) {
+                    message.opacity += 1 / message.fadeFrames;
+                    message.opacity = message.opacity > 1 ? 1 : message.opacity;
+                }
+                this.ctx.globalAlpha = message.opacity;
+                if (message.prettyBorder) {
+                    this.ctx.fillStyle = this.colorArray[message.borderColors[0]];
+                    // now draw the text, offset by (+1, +1)
+                    if (message.ascentFrames > 0 || evenFrame) {
+                        this.ctx.fillText(message.message, this.canvasCenter + 1, this.targetLocation + (message.ascentFrames * 3) + 1);
+                    }
+                    if (evenFrame) {
+                        message.borderColors.push(message.borderColors.shift());
+                    }
+                }
+                if (message.ascentFrames > 0 || evenFrame) {
+                    this.ctx.fillStyle = this.messageColor;
+                    this.ctx.fillText(message.message, this.canvasCenter, this.targetLocation + (message.ascentFrames * 3));
+                    this.ctx.globalAlpha = 1;
+                }
+                message.ascentFrames -= message.ascentFrames > 0 ? 1 : 0;
+                message.flashFrames -= message.flashFrames > 0 && message.ascentFrames === 0 ? 1 : 0;
+                if (message.ascentFrames + message.flashFrames === 0) {
+                    finishedMessages.push(parseInt(messageIndex));
+                }
+            }
+            if (finishedMessages.length > 0) {
+                this.pruneMessages(finishedMessages);
+            }
+            //this.ctx.font = previousFont;
+        }
+    };
+    ScoreMessenger.prototype.clearMessages = function () {
+        this.messages = [];
+    };
+    ScoreMessenger.prototype.pruneMessages = function (messageIndices) {
+        if (messageIndices === void 0) { messageIndices = []; }
+        if (messageIndices.length > 0) {
+            for (var _i = 0, messageIndices_1 = messageIndices; _i < messageIndices_1.length; _i++) {
+                var index = messageIndices_1[_i];
+                this.messages.splice(index, 1);
+            }
+        }
+    };
+    return ScoreMessenger;
 }());
 /**
  * Tetris - A class used to represent the game state and pieces that comprise it.
@@ -509,7 +606,7 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter"
         ];
-        this.debugControls = ["0", "9", "8", "7", "6", "PageUp", "PageDown"];
+        this.debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown"];
         // game state
         this.activePiece = null;
         this.autorepeatFrameLock = 0;
@@ -638,6 +735,8 @@ var Tetris = /** @class */ (function () {
         // todo: get high score from wherever it has been saved?
         var localHighScore = localStorage.getItem("highScore");
         this.highScore = localHighScore !== null ? parseInt(localHighScore) : 16000;
+        // setup ScoreMessenger
+        this.messenger = new ScoreMessenger(this.ctx, this.cvHeights.c3, this.cvWidths.c2, this.colorArray);
         this.start();
     }
     Tetris.prototype.start = function () {
@@ -681,6 +780,10 @@ var Tetris = /** @class */ (function () {
                         // check for levelup
                         if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
                             _this.gameLevel++;
+                            // stagger message so it isn't simultaneous with line clear
+                            setTimeout(function () {
+                                _this.addMessage("Level Up! " + _this.gameLevel);
+                            }, 300);
                             if (_this.activePiece !== null) {
                                 clearInterval(_this.activePiece.gravity);
                                 _this.activePiece.gravity = null;
@@ -899,6 +1002,9 @@ var Tetris = /** @class */ (function () {
             else if (input === "6") {
                 game.pieceGlow = !game.pieceGlow;
             }
+            else if (input === "5") {
+                game.messenger.addMessage("Test message!", true);
+            }
             else if (input === "PageUp") {
                 game.linesCleared += 10;
             }
@@ -1033,6 +1139,10 @@ var Tetris = /** @class */ (function () {
         this.score += score;
         this.highScore = this.score > this.highScore ? this.score : this.highScore;
     };
+    Tetris.prototype.addMessage = function (message, prettyBorder) {
+        if (prettyBorder === void 0) { prettyBorder = false; }
+        this.messenger.addMessage(message, prettyBorder);
+    };
     Tetris.prototype.getLevel = function () {
         return this.gameLevel;
     };
@@ -1058,6 +1168,8 @@ var Tetris = /** @class */ (function () {
         }
         // draw UI
         this.drawUI(sinOffset, cosOffset);
+        // draw messages
+        this.messenger.drawMessages();
         // draw pause overlay if necessary
         this.drawPause();
         // finally, draw loading overlay if necessary
