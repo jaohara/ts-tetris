@@ -485,7 +485,7 @@ var Well = /** @class */ (function () {
  */
 var ScoreMessenger = /** @class */ (function () {
     function ScoreMessenger(ctx, targetLocation, canvasCenter, colorArray, font, messageColor) {
-        if (font === void 0) { font = "Poppins"; }
+        if (font === void 0) { font = "Righteous"; }
         if (messageColor === void 0) { messageColor = "#bbb"; }
         this.messages = [];
         this.canvasCenter = canvasCenter;
@@ -499,7 +499,7 @@ var ScoreMessenger = /** @class */ (function () {
         if (prettyBorder === void 0) { prettyBorder = false; }
         // should I have these be more customizable?
         var newMessage = {
-            ascentFrames: 20,
+            ascentFrames: 40,
             borderColors: [1, 2, 3, 4, 5, 6, 7],
             fadeFrames: 30,
             flashFrames: 30,
@@ -513,7 +513,7 @@ var ScoreMessenger = /** @class */ (function () {
         if (this.messages.length > 0) {
             //let previousFont = this.ctx.font;
             //this.ctx.font = `${.6 * window.devicePixelRatio}em bold "${this.font}"`;
-            this.ctx.font = .6 * window.devicePixelRatio + "em bold \"" + this.font + "\"";
+            this.ctx.font = 1.2 * window.devicePixelRatio + "em \"" + this.font + "\"";
             console.log(this.ctx.font);
             var finishedMessages = [];
             for (var messageIndex in this.messages) {
@@ -621,10 +621,13 @@ var Tetris = /** @class */ (function () {
         this.spawnLock = false;
         this.titleScreen = true;
         // menu stuff
+        this.optionOptions = [];
+        this.optionSelectedOption = 0;
         this.pauseScreenOptions = ["Resume", "Restart", "Options", "Quit"];
-        this.titleScreenOptions = ["Start", "Options"];
-        this.startOptions = ["Classic", "Endless", "Sprint"];
         this.pauseScreenSelectedOption = 0;
+        this.startOptions = ["Classic", "Endless", "Sprint"];
+        this.titleScreenEnterPressed = false;
+        this.titleScreenOptions = ["Start", "Options"];
         this.titleScreenSelectedOption = 0;
         this.titleScreenTransitionTimer = null;
         // graphics stuff
@@ -647,7 +650,8 @@ var Tetris = /** @class */ (function () {
         this.bezierColor2 = '#68e4b6';
         this.borderColor = '#bbb';
         this.pauseColor = '#000';
-        this.gameFont = 'Poppins';
+        // private readonly gameFont       = 'Poppins';
+        this.gameFont = 'Righteous';
         this.loadOverlayOpacityTimer = null;
         this.loadOverlayLock = false;
         this.loadOverlayOpacity = 0;
@@ -717,7 +721,7 @@ var Tetris = /** @class */ (function () {
         this.renderedBackground.width = this.canvas.width * 3;
         this.renderedBackground.height = this.canvas.height * 3;
         var bgCtx = this.renderedBackground.getContext('2d');
-        //bgCtx.rotate(Math.PI/8);
+        bgCtx.rotate(Math.PI / 8);
         var pieceArray = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
         for (var row = 0; row < Math.floor(this.renderedBackground.height / (this.blockSize * 4)); row++) {
             console.log("Row number " + row);
@@ -942,24 +946,29 @@ var Tetris = /** @class */ (function () {
                     // navigate pause menu
                     // game.lastFrameAction is a very rudimentary way of halving repeat speed
                     // ....and it's not working.
+                    /*
                     if (input === "up") {
-                        console.log("Up While paused");
                         if (game.lastFrameAction !== "up") {
-                            game.pauseScreenSelectedOption--;
-                            game.pauseScreenSelectedOption = game.pauseScreenSelectedOption < 0 ?
-                                game.pauseScreenOptions.length - 1 : game.pauseScreenSelectedOption;
+                            game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption,
+                                game.pauseScreenOptions.length, "up");
                         }
+
                         game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
                     }
                     else if (input === "down") {
-                        console.log("Down While paused");
                         if (game.lastFrameAction !== "down") {
-                            game.pauseScreenSelectedOption++;
-                            game.pauseScreenSelectedOption =
-                                game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
-                                    game.pauseScreenSelectedOption;
+                            game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption,
+                                    game.pauseScreenOptions.length, "down");
                         }
+
                         game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
+                    }*/
+                    // todo: I think this condensed all of that, remove when sure
+                    if (input === "up" || input === "down") {
+                        if (game.lastFrameAction !== input) {
+                            game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption, game.pauseScreenOptions.length, input);
+                        }
+                        game.lastFrameAction = game.lastFrameAction === input ? null : input;
                     }
                     // confirm pause menu option
                     else if (input === "Enter") {
@@ -978,10 +987,44 @@ var Tetris = /** @class */ (function () {
                     }
                 }
             }
+            // title screen and game over controls
             else {
-                // should only be on game over and title screen states
                 if (input === "Enter" || input === "n" || gamepadSource && (input === "Escape" || input === "ArrowUp")) {
-                    game.newGame();
+                    if (!game.titleScreenEnterPressed) {
+                        game.titleScreenEnterPressed = true;
+                    }
+                    else if (game.titleScreenSelectedOption === 0) {
+                        game.newGame();
+                    }
+                }
+                else if (input === "Escape") {
+                    game.titleScreenEnterPressed = false;
+                }
+                else if (game.titleScreenEnterPressed && input === "up" || input === "down") {
+                    /*
+                    if (input === "up") {
+                        if (game.lastFrameAction !== "up") {
+                            game.titleScreenSelectedOption--;
+                            game.titleScreenSelectedOption = game.titleScreenSelectedOption < 0 ?
+                                game.pauseScreenOptions.length - 1 : game.titleScreenSelectedOption;
+                        }
+
+                        game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
+                    }
+                    else if (input === "down") {
+                        if (game.lastFrameAction !== "down") {
+                            game.pauseScreenSelectedOption++;
+                            game.pauseScreenSelectedOption =
+                                game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
+                                    game.pauseScreenSelectedOption;
+                        }
+
+                        game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
+                    }*/
+                    if (game.lastFrameAction !== input) {
+                        game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption, game.titleScreenOptions.length, input);
+                    }
+                    game.lastFrameAction = game.lastFrameAction === input ? null : input;
                 }
             }
         }
@@ -1015,6 +1058,16 @@ var Tetris = /** @class */ (function () {
                 }
             }
         }
+    };
+    Tetris.changeOption = function (option, bounds, direction) {
+        option += direction === "up" ? -1 : 1;
+        if (direction === "down") {
+            option = option > bounds - 1 ? 0 : option;
+        }
+        else {
+            option = option < 0 ? bounds - 1 : option;
+        }
+        return option;
     };
     Tetris.clearLastFrameAction = function () {
         game.lastFrameAction = null;
@@ -1056,7 +1109,8 @@ var Tetris = /** @class */ (function () {
         console.log("Gamepad[" + game.gamepadIndex + "] " + (connected ? "" : "dis") + "connected");
     };
     // what's up with this vs the state reset in endGame? should I keep part of this?
-    Tetris.prototype.newGame = function () {
+    Tetris.prototype.newGame = function (gameType) {
+        if (gameType === void 0) { gameType = "endless"; }
         this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
@@ -1065,6 +1119,7 @@ var Tetris = /** @class */ (function () {
         this.overlayOpacity = 0;
         this.score = 0;
         this.titleScreen = false;
+        this.titleScreenEnterPressed = false;
         this.well.resetWell();
     };
     Tetris.prototype.newPiece = function () {
@@ -1460,16 +1515,21 @@ var Tetris = /** @class */ (function () {
     };
     Tetris.prototype.drawTitle = function () {
         var _this = this;
+        this.previousLoopTime = Date.now();
+        // right now this is all unused
         // todo: Fix background animation - what's up with that stuttered jump?
         if (this.renderedBGTimer === null) {
             this.renderedBGTimer = setInterval(function () {
-                _this.titleScreenPromptOpacity = (Math.cos(Date.now() / 250) + 2) / 3;
-                _this.renderedBGX -= _this.renderedBGX >= _this.canvas.width * -1 + (_this.blockSize / 3) ?
-                    _this.canvas.width - _this.blockSize : 0;
+                _this.titleScreenPromptOpacity = (Math.cos(_this.previousLoopTime / 250) + 2) / 3;
+                /*
+                this.renderedBGX -= this.renderedBGX >= this.canvas.width * -1 + (this.blockSize/3) ?
+                    this.canvas.width - this.blockSize : 0;
                 //this.renderedBGX += 1;
                 //this.renderedBGY += 1;
-                _this.renderedBGY = _this.renderedBGY >= _this.canvas.height * -1 ?
-                    _this.canvas.height * -2 : _this.renderedBGY;
+                this.renderedBGY = this.renderedBGY >= this.canvas.height * -1 ?
+                    this.canvas.height * -2 : this.renderedBGY;
+
+                */
             }, this.updateFrequency / 3);
         }
         this.ctx.globalAlpha = .2;
@@ -1479,12 +1539,36 @@ var Tetris = /** @class */ (function () {
         var cvh = this.cvHeights;
         this.toggleTextShadow();
         this.ctx.fillStyle = this.fontColor;
-        this.ctx.font = 10.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+        // this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
+        this.ctx.font = 10.0 * window.devicePixelRatio + "em \"Monoton\"";
         this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
         this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        this.ctx.globalAlpha = this.titleScreenPromptOpacity;
-        this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
-        this.ctx.globalAlpha = 1;
+        if (!this.titleScreenEnterPressed) {
+            this.ctx.globalAlpha = this.titleScreenPromptOpacity;
+            this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
+            this.ctx.globalAlpha = 1;
+        }
+        else {
+            this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
+            for (var optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
+                /*
+                this.ctx.fillStyle = optionIndex === this.titleScreenSelectedOption ?
+                    this.bgGradientColorString2 : this.fontColor;
+
+                 */
+                var option = this.titleScreenOptions[optionIndex];
+                this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
+                if (optionIndex === this.titleScreenSelectedOption) {
+                    // todo: make a select color that is complimentary or contrasts more
+                    this.ctx.fillStyle = this.bgGradientColorString2;
+                    this.ctx.globalAlpha = this.titleScreenPromptOpacity;
+                    this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
+                    this.ctx.fillStyle = this.fontColor;
+                    this.ctx.globalAlpha = 1;
+                }
+            }
+        }
+        this.ctx.fillStyle = this.fontColor;
         this.ctx.font = .8 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
         this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
         this.toggleTextShadow();
