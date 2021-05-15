@@ -188,23 +188,23 @@ class Tetromino {
         let rotationsAttempted = !this.floorKicked ? 4 : 3;
         let kicksAttempted = this.pieceType === "I" ? 4 : 3;
         let rotationFound = false;
-        console.log(`Starting rotations: rotationsAttempted = ${rotationsAttempted}, kicksAttempted = ${kicksAttempted}`);
+        //console.log(`Starting rotations: rotationsAttempted = ${rotationsAttempted}, kicksAttempted = ${kicksAttempted}`);
 
         for (let rotation = 0; rotation < rotationsAttempted && !rotationFound; rotation++) {
             let xKick = rotation === 1 ? 1 : 0;
             let yKick = rotation === 3 ? -1 : 0;
             xKick = rotation === 2 ? -1 : xKick;
 
-            console.log(`\trotation: ${rotation} - xKick, yKick = ${xKick}, ${yKick}`)
+            // console.log(`\trotation: ${rotation} - xKick, yKick = ${xKick}, ${yKick}`)
 
             for (let kick = 1; kick < kicksAttempted && !rotationFound; kick++) {
                 // is this it?
                 newPos = [];
                 validMove = true;
-                console.log(`\t\tkick attempt ${kick}...`);
+                // console.log(`\t\tkick attempt ${kick}...`);
 
                 for (let i = 0; i < transform.length && validMove; i++) {
-                    console.log(`\t\ttransform ${i}...`);
+                    // console.log(`\t\ttransform ${i}...`);
 
                     // for rotation transforms, [0] is x, [1] is y (column, row)
                     let blockRotation = transform[i].split(":").map(x => parseInt(x));
@@ -222,7 +222,7 @@ class Tetromino {
 
                     validMove = this.checkValidMove(currentPos);
 
-                    console.log(`\t\t\tvalidMove = ${validMove}`);
+                    // console.log(`\t\t\tvalidMove = ${validMove}`);
                 }
 
                 rotationFound = validMove;
@@ -616,7 +616,6 @@ class ScoreMessenger {
             //let previousFont = this.ctx.font;
             //this.ctx.font = `${.6 * window.devicePixelRatio}em bold "${this.font}"`;
             this.ctx.font = `${1.2 * window.devicePixelRatio}em "${this.font}"`;
-            console.log(this.ctx.font);
             let finishedMessages: number[] = [];
 
             for (let messageIndex in this.messages) {
@@ -775,6 +774,8 @@ class Tetris {
     // game state
     private activePiece: Tetromino = null;
     autorepeatFrameLock: number = 0;
+    private displayScore: number;
+    private displayScoreTimer: ReturnType<typeof setTimeout> = null;
     private elapsedTime: number;
     private gameLoop: ReturnType<typeof setTimeout>;
     private gameOver: boolean = true;
@@ -802,10 +803,10 @@ class Tetris {
     private optionSelectedOption: number = 0;
     private pauseScreenOptions  = ["Resume", "Restart", "Options", "Quit"];
     private pauseScreenSelectedOption: number = 0;
+    private selectionOpacity: number;
     private startOptions        = ["Classic", "Endless", "Sprint"];
     private titleScreenEnterPressed = false;
     private titleScreenOptions  = ["Start", "Options"]
-    private titleScreenPromptOpacity: number;
     private titleScreenSelectedOption: number = 0;
     private titleScreenTransitionTimer: ReturnType<typeof setTimeout> = null;
 
@@ -828,6 +829,9 @@ class Tetris {
     private readonly bezierColor1   = '#3498db';
     private readonly bezierColor2   = '#68e4b6';
     private readonly borderColor    = '#bbb';
+    private highlightColor          = {'h': 21, 's': 84, 'l': 36};
+    private highlightColorString    = 'hsl(21, 84%, 36%)';
+    private highlightColorTarget    = 21;
     private readonly pauseColor     = '#000';
     // private readonly gameFont       = 'Poppins';
     private readonly gameFont       = 'Righteous';
@@ -918,10 +922,7 @@ class Tetris {
         let pieceArray = ['I', 'J', 'L', 'O', 'S', 'T', 'Z']
 
         for (let row = 0; row < Math.floor(this.renderedBackground.height/(this.blockSize*4)); row++) {
-            console.log(`Row number ${row}`);
-
             for (let col = 0; col < Math.floor(this.renderedBackground.width/(this.blockSize*4)); col++) {
-                console.log(`\tCol number ${col}`);
                 let currentPiece = pieceArray.shift();
                 pieceArray.push(currentPiece);
 
@@ -958,6 +959,19 @@ class Tetris {
             window.addEventListener("gamepaddisconnected", (e) => Tetris.setupGamepad(e, false));
 
             //this.newGame();
+
+            // set score increment interval
+            this.displayScoreTimer = setInterval(() => {
+                // should this be faster?
+                if (this.displayScore < this.score) {
+                    if (this.score - this.displayScore > 1000) {
+                        this.displayScore += 100
+                    }
+                    else {
+                        this.displayScore++;
+                    }
+                }
+            }, 1);
 
             // MAIN GAME LOOP
             this.gameLoop = setInterval(() => {
@@ -1005,6 +1019,11 @@ class Tetris {
                                 clearInterval(this.activePiece.gravity);
                                 this.activePiece.gravity = null;
                             }
+                        }
+
+                        // increment displayScore, if necessary
+                        if (this.displayScore < this.score) {
+                            this.displayScore++;
                         }
 
                         // check if backup piece bag is exhausted
@@ -1165,27 +1184,6 @@ class Tetris {
                 }
                 // Pause Controls
                 else if (game.paused) {
-                    // navigate pause menu
-                    // game.lastFrameAction is a very rudimentary way of halving repeat speed
-                    // ....and it's not working.
-                    /*
-                    if (input === "up") {
-                        if (game.lastFrameAction !== "up") {
-                            game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption,
-                                game.pauseScreenOptions.length, "up");
-                        }
-
-                        game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
-                    }
-                    else if (input === "down") {
-                        if (game.lastFrameAction !== "down") {
-                            game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption,
-                                    game.pauseScreenOptions.length, "down");
-                        }
-
-                        game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
-                    }*/
-                    // todo: I think this condensed all of that, remove when sure
                     if (input === "up" || input === "down") {
                         if (game.lastFrameAction !== input) {
                             game.pauseScreenSelectedOption = Tetris.changeOption(game.pauseScreenSelectedOption,
@@ -1219,33 +1217,14 @@ class Tetris {
                         game.titleScreenEnterPressed = true;
                     }
                     else if (game.titleScreenSelectedOption === 0){
-                        game.newGame();
+                        //game.newGame();
+                        game.newGameFromTitle();
                     }
                 }
                 else if (input === "Escape") {
                     game.titleScreenEnterPressed = false;
                 }
                 else if (game.titleScreenEnterPressed && input === "up" || input === "down"){
-                    /*
-                    if (input === "up") {
-                        if (game.lastFrameAction !== "up") {
-                            game.titleScreenSelectedOption--;
-                            game.titleScreenSelectedOption = game.titleScreenSelectedOption < 0 ?
-                                game.pauseScreenOptions.length - 1 : game.titleScreenSelectedOption;
-                        }
-
-                        game.lastFrameAction = game.lastFrameAction === "up" ? null : "up";
-                    }
-                    else if (input === "down") {
-                        if (game.lastFrameAction !== "down") {
-                            game.pauseScreenSelectedOption++;
-                            game.pauseScreenSelectedOption =
-                                game.pauseScreenSelectedOption > game.pauseScreenOptions.length - 1 ? 0 :
-                                    game.pauseScreenSelectedOption;
-                        }
-
-                        game.lastFrameAction = game.lastFrameAction === "down" ? null : "down";
-                    }*/
                     if (game.lastFrameAction !== input) {
                         game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption,
                             game.titleScreenOptions.length, input);
@@ -1345,6 +1324,7 @@ class Tetris {
 
     // what's up with this vs the state reset in endGame? should I keep part of this?
     private newGame(gameType: string = "endless"): void{
+        this.displayScore = 0;
         this.elapsedTime = 0;
         // todo: allow for starting at a higher level?
         this.gameLevel = 1;
@@ -1369,15 +1349,23 @@ class Tetris {
         this.upcomingPieces = pieceBagContents.concat(pieceBagBackupContents).slice(0,5);
     }
 
-    lineClear(): void {
+    lineClear(colorIncrement: number = 2): void {
+        // Could this be done smarter to not reuse so many lines?
         this.linesCleared++;
 
-        this.bgGradientTarget1 += 2;
-        this.bgGradientTarget2 += 2;
-        this.bgGradientTarget1 = this.bgGradientTarget1 > 360 ?
-            this.bgGradientTarget1 - 360 : this.bgGradientTarget1;
-        this.bgGradientTarget2 = this.bgGradientTarget2 > 360 ?
-            this.bgGradientTarget2 - 360 : this.bgGradientTarget2;
+        this.bgGradientTarget1 += colorIncrement;
+        this.bgGradientTarget2 += colorIncrement;
+        this.highlightColorTarget += colorIncrement;
+
+        this.bgGradientTarget1 -= this.bgGradientTarget1 > 360 ? 360 : 0;
+        this.bgGradientTarget2 -= this.bgGradientTarget2 > 360 ? 360 : 0;
+        this.highlightColorTarget -= this.highlightColorTarget > 360 ? 360 : 0;
+
+        /*
+        this.highlightColorTarget -= this.highlightColorTarget > 360 ?
+            this.highlightColorTarget - 360 : this.highlightColorTarget;
+         */
+
 
 
         // shift bg gradient pattern with additional cleared lines
@@ -1385,14 +1373,15 @@ class Tetris {
             this.bgGradientTimer = setInterval(() => {
                 this.bgGradientColor1.h++;
                 this.bgGradientColor2.h++;
+                this.highlightColor.h++;
 
-                this.bgGradientColor1.h = this.bgGradientColor1.h > 360 ?
-                    this.bgGradientColor1.h - 360 : this.bgGradientColor1.h;
-                this.bgGradientColor2.h = this.bgGradientColor2.h > 360 ?
-                    this.bgGradientColor2.h - 360 : this.bgGradientColor2.h;
+                this.bgGradientColor1.h -= this.bgGradientColor1.h > 360 ? 360 : 0;
+                this.bgGradientColor2.h -= this.bgGradientColor2.h > 360 ? 360 : 0;
+                this.highlightColor.h   -= this.highlightColor.h > 360 ? 360 : 0;
 
                 if (this.bgGradientColor1.h >= this.bgGradientTarget1 &&
-                    this.bgGradientColor2.h >= this.bgGradientTarget2){
+                    this.bgGradientColor2.h >= this.bgGradientTarget2 &&
+                    this.highlightColor.h >= this.highlightColorTarget){
                     clearInterval(this.bgGradientTimer);
                     this.bgGradientTimer = null;
                 }
@@ -1401,6 +1390,8 @@ class Tetris {
                     `hsl(${this.bgGradientColor1.h}, ${this.bgGradientColor1.s}%, ${this.bgGradientColor1.l}%)`;
                 this.bgGradientColorString2 =
                     `hsl(${this.bgGradientColor2.h}, ${this.bgGradientColor2.s}%, ${this.bgGradientColor2.l}%)`;
+                this.highlightColorString =
+                    `hsl(${this.highlightColor.h}, ${this.highlightColor.s}%, ${this.highlightColor.l}%)`;
 
             }, this.updateFrequency * 6);
         }
@@ -1749,7 +1740,8 @@ class Tetris {
                 this.ctx.fillStyle = i == 1 ? this.borderColor : this.ctx.fillStyle;
 
                 // these .25s don't seem like the solution
-                this.ctx.fillText(`${this.score}`, lBoxTextX,
+
+                this.ctx.fillText(`${this.displayScore}`, lBoxTextX,
                     blBoxTextY + Math.floor((blTextOffset * 1.25)), blBoxWidth);
                 this.ctx.fillText(`${this.linesCleared}`, lBoxTextX,
                     blBoxTextY + Math.floor((blTextOffset * 4.25)), blBoxWidth);
@@ -1757,6 +1749,24 @@ class Tetris {
                     blBoxTextY + Math.floor((blTextOffset * 8.25)), blBoxWidth);
                 this.ctx.fillText(`${mins}:${secs}`, lBoxTextX,
                     blBoxTextY + Math.floor((blTextOffset * 12.25)), blBoxWidth);
+
+                // todo: this works for now but could be prettier
+                // draw score incrementing effect
+                if (this.displayScore < this.score) {
+                    let prevBlur = this.ctx.shadowBlur;
+                    let prevOffset = this.ctx.shadowOffsetY;
+                    let prevColor = this.ctx.shadowColor;
+
+                    this.ctx.shadowOffsetY = 0;
+                    this.ctx.shadowBlur = 10;
+                    this.ctx.shadowColor = this.fontColor;
+                    this.ctx.fillText(`${this.displayScore}`, lBoxTextX,
+                        blBoxTextY + Math.floor((blTextOffset * 1.25)), blBoxWidth);
+
+                    this.ctx.shadowBlur = prevBlur;
+                    this.ctx.shadowOffsetY = prevOffset;
+                    this.ctx.shadowColor = prevColor;
+                }
 
                 // draw high score
                 this.ctx.fillStyle = this.bgGradientColorString1;
@@ -1813,7 +1823,6 @@ class Tetris {
             let cvw = this.cvWidths;
             let cvh = this.cvHeights;
 
-            //this.toggleTextShadow();
             this.ctx.fillStyle = this.fontColor;
             this.ctx.font = `${3.0 * window.devicePixelRatio}em "${this.gameFont}"`;
             this.ctx.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
@@ -1823,13 +1832,18 @@ class Tetris {
             this.ctx.font = `${1.2 * window.devicePixelRatio}em "${this.gameFont}"`;
 
             for (let option = 0; option < this.pauseScreenOptions.length; option++) {
-                this.ctx.fillStyle =
-                    option === this.pauseScreenSelectedOption ? this.bgGradientColorString2 : this.fontColor;
                 this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
+
+                if (option === this.pauseScreenSelectedOption){
+                    this.ctx.fillStyle = this.highlightColorString;
+                    this.ctx.globalAlpha = this.selectionOpacity;
+                    this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
+                    this.ctx.fillStyle = this.fontColor;
+                    this.ctx.globalAlpha = 1;
+                }
             }
 
             this.ctx.globalAlpha = 1;
-            //this.toggleTextShadow();
         }
     }
 
@@ -1850,7 +1864,7 @@ class Tetris {
         // todo: Fix background animation - what's up with that stuttered jump?
         if (this.renderedBGTimer === null) {
             this.renderedBGTimer = setInterval(() => {
-                this.titleScreenPromptOpacity = (Math.cos(this.previousLoopTime/250) + 2)/3;
+                this.selectionOpacity = (Math.cos(this.previousLoopTime/250) + 2)/3;
                 /*
                 this.renderedBGX -= this.renderedBGX >= this.canvas.width * -1 + (this.blockSize/3) ?
                     this.canvas.width - this.blockSize : 0;
@@ -1880,7 +1894,7 @@ class Tetris {
         this.ctx.font = `${window.devicePixelRatio}em "${this.gameFont}"`;
 
         if (!this.titleScreenEnterPressed) {
-            this.ctx.globalAlpha = this.titleScreenPromptOpacity;
+            this.ctx.globalAlpha = this.selectionOpacity;
             this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
             this.ctx.globalAlpha = 1;
         }
@@ -1888,22 +1902,18 @@ class Tetris {
             this.ctx.font = `${1.4 * window.devicePixelRatio}em ${this.gameFont}`;
 
             for (let optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
-                /*
-                this.ctx.fillStyle = optionIndex === this.titleScreenSelectedOption ?
-                    this.bgGradientColorString2 : this.fontColor;
-
-                 */
-
                 let option = this.titleScreenOptions[optionIndex];
                 this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
 
                 if (optionIndex === this.titleScreenSelectedOption) {
                     // todo: make a select color that is complimentary or contrasts more
-                    this.ctx.fillStyle = this.bgGradientColorString2;
-                    this.ctx.globalAlpha = this.titleScreenPromptOpacity;
+                    this.toggleTextShadow();
+                    this.ctx.fillStyle = this.highlightColorString;
+                    this.ctx.globalAlpha = this.selectionOpacity;
                     this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
                     this.ctx.fillStyle = this.fontColor;
                     this.ctx.globalAlpha = 1;
+                    this.toggleTextShadow();
                 }
             }
         }
@@ -1916,7 +1926,8 @@ class Tetris {
     }
 
     private toggleTextShadow() {
-        this.ctx.shadowColor = this.bgGradientColorString1;
+        // this.ctx.shadowColor = this.bgGradientColorString1;
+        this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
         this.ctx.shadowBlur = this.ctx.shadowBlur === 5 ? 0 : 5;
         this.ctx.shadowOffsetY = this.ctx.shadowOffsetY === 2 ? 0 : 2;
     }
@@ -1983,7 +1994,6 @@ class Tetris {
         if (this.titleScreenTransitionTimer === null) {
             this.titleScreenTransitionTimer = setInterval(() => {
                 if (!this.loadOverlayFadeUp) {
-                    console.log("Reached final quitToTitle state");
                     // transition to title
                     //this.endGame(true);
                     this.endGame(!quickRestart, quickRestart);
@@ -1993,6 +2003,22 @@ class Tetris {
                     clearInterval(this.titleScreenTransitionTimer);
                     this.titleScreenTransitionTimer = null;
                 }
+            }, this.updateFrequency);
+        }
+    }
+
+    private newGameFromTitle(gameType: string = "endless") {
+        this.fadeOverlayToBlack();
+
+        if (this.titleScreenTransitionTimer === null) {
+            this.titleScreenTransitionTimer = setInterval(() => {
+               if (!this.loadOverlayFadeUp) {
+                   this.newGame(gameType);
+
+                   this.overlayBehindTheScenesComplete = true;
+                   clearInterval(this.titleScreenTransitionTimer);
+                   this.titleScreenTransitionTimer = null;
+               }
             }, this.updateFrequency);
         }
     }
