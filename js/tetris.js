@@ -495,14 +495,16 @@ var ScoreMessenger = /** @class */ (function () {
         this.targetLocation = targetLocation;
         this.messageColor = messageColor;
     }
-    ScoreMessenger.prototype.addMessage = function (message, prettyBorder) {
+    ScoreMessenger.prototype.addMessage = function (message, prettyBorder, important) {
         if (prettyBorder === void 0) { prettyBorder = false; }
+        if (important === void 0) { important = false; }
         // should I have these be more customizable?
         var newMessage = {
             ascentFrames: 40,
             borderColors: [1, 2, 3, 4, 5, 6, 7],
             fadeFrames: 30,
             flashFrames: 30,
+            important: important,
             message: message.toUpperCase(),
             opacity: 0,
             prettyBorder: prettyBorder
@@ -517,7 +519,10 @@ var ScoreMessenger = /** @class */ (function () {
             var finishedMessages = [];
             for (var messageIndex in this.messages) {
                 var message = this.messages[messageIndex];
+                var fontSize = message.important ? 1.6 : 1.2;
+                var importantOffset = message.important ? 48 : 0; //todo: this is hardcode-y, I need a better way
                 var evenFrame = (message.flashFrames + message.ascentFrames) % 2 === 0;
+                this.ctx.font = fontSize * window.devicePixelRatio + "em \"" + this.font + "\"";
                 // fade up
                 if (message.opacity < 1) {
                     message.opacity += 1 / message.fadeFrames;
@@ -528,7 +533,7 @@ var ScoreMessenger = /** @class */ (function () {
                     this.ctx.fillStyle = this.colorArray[message.borderColors[0]];
                     // now draw the text, offset by (+1, +1)
                     if (message.ascentFrames > 0 || evenFrame) {
-                        this.ctx.fillText(message.message, this.canvasCenter + 1, this.targetLocation + (message.ascentFrames * 3) + 1);
+                        this.ctx.fillText(message.message, this.canvasCenter + 1, (this.targetLocation - importantOffset) + (message.ascentFrames * 3) + 1);
                     }
                     if (evenFrame) {
                         message.borderColors.push(message.borderColors.shift());
@@ -536,7 +541,7 @@ var ScoreMessenger = /** @class */ (function () {
                 }
                 if (message.ascentFrames > 0 || evenFrame) {
                     this.ctx.fillStyle = this.messageColor;
-                    this.ctx.fillText(message.message, this.canvasCenter, this.targetLocation + (message.ascentFrames * 3));
+                    this.ctx.fillText(message.message, this.canvasCenter, (this.targetLocation - importantOffset) + (message.ascentFrames * 3));
                     this.ctx.globalAlpha = 1;
                 }
                 message.ascentFrames -= message.ascentFrames > 0 ? 1 : 0;
@@ -611,24 +616,42 @@ var Tetris = /** @class */ (function () {
         this.autorepeatFrameLock = 0;
         this.displayScoreTimer = null;
         this.gameOver = true;
+        this.gameReport = null;
         this.gamepadConnected = false;
         this.gamepadIndex = null;
         this.ghostPiece = null;
         this.heldPiece = null;
         this.holdLock = false;
+        this.paused = false;
         this.pieceBag = [];
         this.pieceBagBackup = [];
         this.spawnLock = false;
         this.titleScreen = true;
         // menu stuff
-        this.optionOptions = [];
-        this.optionSelectedOption = 0;
+        this.allMenus = ["Title", "Start", "Options"];
+        this.configOptions = []; // todo: maybe make this an object?
+        this.configSelectedOption = 0;
+        this.currentMenu = "Title";
+        this.gameOverOptions = ["Retry", "Quit"];
+        this.gameOverSelectedOption = 0;
         this.pauseScreenOptions = ["Resume", "Restart", "Options", "Quit"];
         this.pauseScreenSelectedOption = 0;
         this.startOptions = ["Classic", "Endless", "Sprint"];
+        this.titleScreenDisplay = true;
         this.titleScreenEnterPressed = false;
         this.titleScreenOptions = ["Start", "Options"];
         this.titleScreenSelectedOption = 0;
+        // transition stuff
+        this.loadOverlayOpacityTimer = null;
+        this.loadOverlayLock = false; // todo: does this actually do anything?
+        this.loadOverlayOpacity = 0;
+        this.menuTransitionTimer = null;
+        this.menuTransitionComplete = false;
+        this.menuOpacity = 1;
+        this.overlayBehindTheScenesComplete = false;
+        this.overlayFinalOpacity = .6; // 0-1.0
+        this.overlayOpacity = 0;
+        this.overlayOpacityTimer = null;
         this.titleScreenTransitionTimer = null;
         // graphics stuff
         /*
@@ -655,13 +678,6 @@ var Tetris = /** @class */ (function () {
         this.pauseColor = '#000';
         // private readonly gameFont       = 'Poppins';
         this.gameFont = 'Righteous';
-        this.loadOverlayOpacityTimer = null;
-        this.loadOverlayLock = false;
-        this.loadOverlayOpacity = 0;
-        this.overlayBehindTheScenesComplete = false;
-        this.overlayFinalOpacity = .6; // 0-1.0
-        this.overlayOpacity = 0;
-        this.overlayOpacityTimer = null;
         this.fontColor = '#bbb';
         this.gridColor = '#9b9ba9';
         this.colorArray = [
@@ -799,7 +815,7 @@ var Tetris = /** @class */ (function () {
                             _this.gameLevel++;
                             // stagger message so it isn't simultaneous with line clear
                             setTimeout(function () {
-                                _this.addMessage("Level Up! " + _this.gameLevel);
+                                _this.addMessage("Level Up! " + _this.gameLevel, true, true);
                             }, 300);
                             if (_this.activePiece !== null) {
                                 clearInterval(_this.activePiece.gravity);
@@ -854,6 +870,22 @@ var Tetris = /** @class */ (function () {
             console.log("Game is already running.");
         }
     };
+    // what's up with this vs the state reset in endGame? should I keep part of this?
+    Tetris.prototype.newGame = function (gameType) {
+        if (gameType === void 0) { gameType = "endless"; }
+        this.displayScore = 0;
+        this.elapsedTime = 0;
+        // todo: allow for starting at a higher level?
+        this.gameLevel = 1;
+        this.gameOver = false;
+        this.newHighScore = false;
+        this.linesCleared = 0;
+        this.overlayOpacity = 0;
+        this.score = 0;
+        this.titleScreen = false;
+        this.titleScreenEnterPressed = false;
+        this.well.resetWell();
+    };
     Tetris.prototype.endGame = function (quitToTitle, restart) {
         if (quitToTitle === void 0) { quitToTitle = false; }
         if (restart === void 0) { restart = false; }
@@ -862,11 +894,23 @@ var Tetris = /** @class */ (function () {
             this.gameOver = true;
             this.titleScreen = quitToTitle;
             this.updateHighScore(true);
+            // set game over info
+            this.gameReport = {
+                gameType: "",
+                highScore: this.newHighScore,
+                level: this.gameLevel,
+                linesCleared: this.linesCleared,
+                score: this.score,
+                time: this.elapsedTime
+            };
             // reset game pieces
-            clearInterval(this.activePiece.gravity);
-            this.activePiece.gravity = null;
-            this.activePiece = null;
+            if (this.activePiece !== null) {
+                clearInterval(this.activePiece.gravity);
+                this.activePiece.gravity = null;
+                this.activePiece = null;
+            }
             this.elapsedTime = 0;
+            this.finalScore = this.score;
             this.linesCleared = 0;
             this.gameLevel = 0;
             this.ghostPiece = null;
@@ -878,6 +922,8 @@ var Tetris = /** @class */ (function () {
             if (restart) {
                 // so is this how I'm restarting the game?
                 this.newGame();
+            }
+            if (this.paused) {
                 this.pause();
             }
         }
@@ -985,23 +1031,44 @@ var Tetris = /** @class */ (function () {
             }
             // title screen and game over controls
             else {
-                if (input === "Enter" || input === "n" || gamepadSource && (input === "Escape" || input === "ArrowUp")) {
+                if (game.titleScreen && (input === "Enter" || input === "n" ||
+                    gamepadSource && (input === "Escape" || input === "ArrowUp"))) {
                     if (!game.titleScreenEnterPressed) {
-                        game.titleScreenEnterPressed = true;
+                        game.fadeMenuTransition(function () {
+                            game.titleScreenEnterPressed = true;
+                        });
+                        //game.titleScreenEnterPressed = true;
                     }
                     else if (game.titleScreenSelectedOption === 0) {
                         //game.newGame();
                         game.newGameFromTitle();
                     }
                 }
-                else if (input === "Escape") {
-                    game.titleScreenEnterPressed = false;
+                else if (input === "Escape" && game.titleScreenEnterPressed) {
+                    game.fadeMenuTransition(function () {
+                        game.titleScreenEnterPressed = false;
+                    });
                 }
-                else if (game.titleScreenEnterPressed && input === "up" || input === "down") {
+                else if (game.titleScreenEnterPressed && (input === "up" || input === "down")) {
                     if (game.lastFrameAction !== input) {
                         game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption, game.titleScreenOptions.length, input);
                     }
                     game.lastFrameAction = game.lastFrameAction === input ? null : input;
+                }
+                else if (game.gameOver && (input === "up" || input === "down")) {
+                    if (game.lastFrameAction !== input) {
+                        game.gameOverSelectedOption = Tetris.changeOption(game.gameOverSelectedOption, game.gameOverOptions.length, input);
+                    }
+                    game.lastFrameAction = game.lastFrameAction === input ? null : input;
+                }
+                else if (game.gameOver && input === "Enter") {
+                    if (game.gameOverSelectedOption === 0) {
+                        //retry
+                        game.restartGame();
+                    }
+                    else if (game.gameOverSelectedOption === 1) {
+                        game.quitToTitle();
+                    }
                 }
             }
         }
@@ -1035,19 +1102,6 @@ var Tetris = /** @class */ (function () {
                 }
             }
         }
-    };
-    Tetris.changeOption = function (option, bounds, direction) {
-        option += direction === "up" ? -1 : 1;
-        if (direction === "down") {
-            option = option > bounds - 1 ? 0 : option;
-        }
-        else {
-            option = option < 0 ? bounds - 1 : option;
-        }
-        return option;
-    };
-    Tetris.clearLastFrameAction = function () {
-        game.lastFrameAction = null;
     };
     Tetris.pollGamepad = function () {
         if (game.gamepadConnected && game.gamepad !== null) {
@@ -1085,20 +1139,18 @@ var Tetris = /** @class */ (function () {
         game.gamepadIndex = game.gamepad.index;
         console.log("Gamepad[" + game.gamepadIndex + "] " + (connected ? "" : "dis") + "connected");
     };
-    // what's up with this vs the state reset in endGame? should I keep part of this?
-    Tetris.prototype.newGame = function (gameType) {
-        if (gameType === void 0) { gameType = "endless"; }
-        this.displayScore = 0;
-        this.elapsedTime = 0;
-        // todo: allow for starting at a higher level?
-        this.gameLevel = 1;
-        this.gameOver = false;
-        this.linesCleared = 0;
-        this.overlayOpacity = 0;
-        this.score = 0;
-        this.titleScreen = false;
-        this.titleScreenEnterPressed = false;
-        this.well.resetWell();
+    Tetris.clearLastFrameAction = function () {
+        game.lastFrameAction = null;
+    };
+    Tetris.changeOption = function (option, bounds, direction) {
+        option += direction === "up" ? -1 : 1;
+        if (direction === "down") {
+            option = option > bounds - 1 ? 0 : option;
+        }
+        else {
+            option = option < 0 ? bounds - 1 : option;
+        }
+        return option;
     };
     Tetris.prototype.newPiece = function () {
         var newPieceType = this.pieceBag.pop();
@@ -1109,6 +1161,34 @@ var Tetris = /** @class */ (function () {
         var pieceBagContents = __spreadArray([], this.pieceBag).reverse();
         var pieceBagBackupContents = __spreadArray([], this.pieceBagBackup).reverse();
         this.upcomingPieces = pieceBagContents.concat(pieceBagBackupContents).slice(0, 5);
+    };
+    Tetris.prototype.holdPiece = function () {
+        if (!this.holdLock) {
+            this.spawnLock = true;
+            clearInterval(this.activePiece.gravity);
+            this.activePiece.gravity = null;
+            console.log("Holding " + this.activePiece + ", swapping for " + this.heldPiece);
+            // did reordering these steps change the lockdelay bug?
+            this.activePiece.removeLockDelay();
+            var tempPiece = this.activePiece;
+            this.activePiece = this.heldPiece !== null ?
+                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
+            this.ghostPiece = this.activePiece !== null ?
+                this.activePiece.getGhost() : null;
+            this.heldPiece = tempPiece;
+            this.holdLock = true;
+            this.spawnLock = false;
+        }
+    };
+    Tetris.prototype.lockActivePiece = function () {
+        console.log("Locking active piece: " + this.activePiece);
+        clearInterval(this.activePiece.gravity);
+        this.activePiece = null;
+        this.ghostPiece = null;
+        this.holdLock = false;
+    };
+    Tetris.prototype.setSpawnLock = function (state) {
+        this.spawnLock = state;
     };
     Tetris.prototype.lineClear = function (colorIncrement) {
         var _this = this;
@@ -1149,41 +1229,15 @@ var Tetris = /** @class */ (function () {
             }, this.updateFrequency * 6);
         }
     };
-    Tetris.prototype.lockActivePiece = function () {
-        console.log("Locking active piece: " + this.activePiece);
-        clearInterval(this.activePiece.gravity);
-        this.activePiece = null;
-        this.ghostPiece = null;
-        this.holdLock = false;
-    };
-    Tetris.prototype.holdPiece = function () {
-        if (!this.holdLock) {
-            this.spawnLock = true;
-            clearInterval(this.activePiece.gravity);
-            this.activePiece.gravity = null;
-            console.log("Holding " + this.activePiece + ", swapping for " + this.heldPiece);
-            // did reordering these steps change the lockdelay bug?
-            this.activePiece.removeLockDelay();
-            var tempPiece = this.activePiece;
-            this.activePiece = this.heldPiece !== null ?
-                new Tetromino(this.heldPiece.pieceType, game, this.well) : null;
-            this.ghostPiece = this.activePiece !== null ?
-                this.activePiece.getGhost() : null;
-            this.heldPiece = tempPiece;
-            this.holdLock = true;
-            this.spawnLock = false;
-        }
-    };
-    Tetris.prototype.setSpawnLock = function (state) {
-        this.spawnLock = state;
-    };
     Tetris.prototype.addScore = function (score) {
         this.score += score;
-        this.highScore = this.score > this.highScore ? this.score : this.highScore;
+        this.newHighScore = this.score > this.highScore ? true : this.newHighScore;
+        this.highScore = this.newHighScore ? this.score : this.highScore;
     };
-    Tetris.prototype.addMessage = function (message, prettyBorder) {
+    Tetris.prototype.addMessage = function (message, prettyBorder, important) {
         if (prettyBorder === void 0) { prettyBorder = false; }
-        this.messenger.addMessage(message, prettyBorder);
+        if (important === void 0) { important = false; }
+        this.messenger.addMessage(message, prettyBorder, important);
     };
     Tetris.prototype.getLevel = function () {
         return this.gameLevel;
@@ -1260,6 +1314,49 @@ var Tetris = /** @class */ (function () {
             this.ctx.fillStyle = "#000";
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
+    };
+    Tetris.prototype.drawGameOver = function () {
+        this.previousLoopTime = Date.now();
+        this.drawOverlay();
+        this.toggleTextShadow();
+        var cvh = this.cvHeights;
+        var cvw = this.cvWidths;
+        this.ctx.fillStyle = this.fontColor;
+        this.ctx.font = 4.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+        this.ctx.fillText("Game Over", cvw.c2, cvh.c4);
+        // draw post-mortem
+        if (this.gameReport !== null) {
+            var gr = this.gameReport;
+            if (gr.highScore) {
+                this.ctx.font = 2.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+                this.ctx.fillText("New High Score!", cvw.c2, cvh.c3);
+            }
+            var linesPerMinute = (gr.linesCleared / (gr.time / 1000 / 60)).toFixed(2);
+            var pointsPerMinute = (gr.score / (gr.time / 1000 / 60)).toFixed(2);
+            var mins = Math.floor((gr.time / 1000) / 60).toString().padStart(2, '0');
+            var secs = Math.floor((gr.time / 1000) % 60).toString().padStart(2, '0');
+            this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+            this.ctx.fillText("Score: " + gr.score, cvw.c2, cvh.c2 - cvh.c12);
+            this.ctx.fillText("Time: " + mins + ":" + secs, cvw.c2, cvh.c2 - cvh.c24);
+            this.ctx.fillText("Lines: " + gr.linesCleared, cvw.c2, cvh.c2);
+            this.ctx.fillText("Lines / Minute: " + linesPerMinute, cvw.c2, cvh.c2 + cvh.c24);
+            this.ctx.fillText("Points / Minute: " + pointsPerMinute, cvw.c2, cvh.c2 + cvh.c12);
+        }
+        this.ctx.font = 1.6 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+        // todo: Okay... this REALLY needs to be made less redundant, I've typed this almost verbatim
+        //  like three or four times already
+        for (var optionIndex = 0; optionIndex < this.gameOverOptions.length; optionIndex++) {
+            var option = this.gameOverOptions[optionIndex];
+            this.ctx.fillText(option, cvw.c2, cvh.c1 - cvh.c4 + cvh.c12 * optionIndex);
+            if (optionIndex === this.gameOverSelectedOption) {
+                this.ctx.fillStyle = this.highlightColorString;
+                this.ctx.globalAlpha = this.selectionOpacity;
+                this.ctx.fillText(option, cvw.c2, cvh.c1 - cvh.c4 + cvh.c12 * optionIndex);
+                this.ctx.fillStyle = this.fontColor;
+                this.ctx.globalAlpha = 1;
+            }
+        }
+        this.toggleTextShadow();
     };
     Tetris.prototype.drawGrid = function () {
         var grid = __spreadArray([], this.well.getGrid());
@@ -1348,6 +1445,95 @@ var Tetris = /** @class */ (function () {
         this.ctx.strokeStyle = this.borderColor;
         this.ctx.strokeRect(gridX - 1, gridY - 1, gridPixWidth + 1, gridPixHeight + 1);
         this.ctx.globalAlpha = 1;
+    };
+    Tetris.prototype.drawOverlay = function () {
+        this.ctx.globalAlpha = this.overlayOpacity;
+        this.ctx.fillStyle = this.pauseColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.globalAlpha = 1;
+    };
+    Tetris.prototype.drawPause = function () {
+        if (this.pauseOverlay) {
+            this.drawOverlay();
+            var cvw = this.cvWidths;
+            var cvh = this.cvHeights;
+            this.ctx.fillStyle = this.fontColor;
+            this.ctx.font = 3.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+            this.ctx.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
+            this.ctx.fillText("Pause", cvw.c2, cvh.c3);
+            // draw pause menu options
+            this.ctx.font = 1.2 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+            for (var option = 0; option < this.pauseScreenOptions.length; option++) {
+                this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
+                if (option === this.pauseScreenSelectedOption) {
+                    this.ctx.fillStyle = this.highlightColorString;
+                    this.ctx.globalAlpha = this.selectionOpacity;
+                    this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
+                    this.ctx.fillStyle = this.fontColor;
+                    this.ctx.globalAlpha = 1;
+                }
+            }
+            this.ctx.globalAlpha = 1;
+        }
+    };
+    Tetris.prototype.drawTitle = function () {
+        var _this = this;
+        this.previousLoopTime = Date.now();
+        // right now this is all unused
+        // todo: Fix background animation - what's up with that stuttered jump?
+        if (this.renderedBGTimer === null) {
+            this.renderedBGTimer = setInterval(function () {
+                _this.selectionOpacity = (Math.cos(_this.previousLoopTime / 250) + 2) / 3;
+                /*
+                this.renderedBGX -= this.renderedBGX >= this.canvas.width * -1 + (this.blockSize/3) ?
+                    this.canvas.width - this.blockSize : 0;
+                //this.renderedBGX += 1;
+                //this.renderedBGY += 1;
+                this.renderedBGY = this.renderedBGY >= this.canvas.height * -1 ?
+                    this.canvas.height * -2 : this.renderedBGY;
+
+                */
+            }, this.updateFrequency / 3);
+        }
+        this.ctx.globalAlpha = .2;
+        this.ctx.drawImage(this.renderedBackground, this.renderedBGX, this.renderedBGY);
+        this.ctx.globalAlpha = 1;
+        var cvw = this.cvWidths;
+        var cvh = this.cvHeights;
+        this.toggleTextShadow();
+        this.ctx.fillStyle = this.fontColor;
+        // this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
+        this.ctx.font = 10.0 * window.devicePixelRatio + "em \"Monoton\"";
+        this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
+        this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+        this.ctx.globalAlpha = this.menuOpacity;
+        if (!this.titleScreenEnterPressed) {
+            this.ctx.globalAlpha = this.menuOpacity < 1 ? this.menuOpacity : this.selectionOpacity;
+            this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.ctx.globalAlpha;
+            this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
+        }
+        else {
+            this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
+            for (var optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
+                var option = this.titleScreenOptions[optionIndex];
+                this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.menuOpacity;
+                this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
+                if (optionIndex === this.titleScreenSelectedOption) {
+                    this.toggleTextShadow();
+                    this.ctx.fillStyle = this.highlightColorString;
+                    this.ctx.globalAlpha = this.selectionOpacity * this.menuOpacity;
+                    this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
+                    this.ctx.fillStyle = this.fontColor;
+                    this.ctx.globalAlpha = 1;
+                    this.toggleTextShadow();
+                }
+            }
+        }
+        this.ctx.globalAlpha = 1;
+        this.ctx.fillStyle = this.fontColor;
+        this.ctx.font = .8 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
+        this.toggleTextShadow();
     };
     Tetris.prototype.drawUI = function (sinOffset, cosOffset) {
         if (!this.gameOver) {
@@ -1485,106 +1671,11 @@ var Tetris = /** @class */ (function () {
             this.drawGameOver();
         }
     };
-    Tetris.prototype.drawPause = function () {
-        if (this.pauseOverlay) {
-            this.drawOverlay();
-            var cvw = this.cvWidths;
-            var cvh = this.cvHeights;
-            this.ctx.fillStyle = this.fontColor;
-            this.ctx.font = 3.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-            this.ctx.globalAlpha = this.overlayOpacity / this.overlayFinalOpacity;
-            this.ctx.fillText("Pause", cvw.c2, cvh.c3);
-            // draw pause menu options
-            this.ctx.font = 1.2 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-            for (var option = 0; option < this.pauseScreenOptions.length; option++) {
-                this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
-                if (option === this.pauseScreenSelectedOption) {
-                    this.ctx.fillStyle = this.highlightColorString;
-                    this.ctx.globalAlpha = this.selectionOpacity;
-                    this.ctx.fillText(this.pauseScreenOptions[option], cvw.c2, cvh.c2 + (option * cvh.c12));
-                    this.ctx.fillStyle = this.fontColor;
-                    this.ctx.globalAlpha = 1;
-                }
-            }
-            this.ctx.globalAlpha = 1;
-        }
-    };
-    Tetris.prototype.drawGameOver = function () {
-        this.drawOverlay();
-        this.toggleTextShadow();
-        this.ctx.fillStyle = this.fontColor;
-        this.ctx.font = 3.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        this.ctx.fillText("Game Over", this.cvWidths.c2, this.cvHeights.c3);
-        this.toggleTextShadow();
-    };
-    Tetris.prototype.drawTitle = function () {
-        var _this = this;
-        this.previousLoopTime = Date.now();
-        // right now this is all unused
-        // todo: Fix background animation - what's up with that stuttered jump?
-        if (this.renderedBGTimer === null) {
-            this.renderedBGTimer = setInterval(function () {
-                _this.selectionOpacity = (Math.cos(_this.previousLoopTime / 250) + 2) / 3;
-                /*
-                this.renderedBGX -= this.renderedBGX >= this.canvas.width * -1 + (this.blockSize/3) ?
-                    this.canvas.width - this.blockSize : 0;
-                //this.renderedBGX += 1;
-                //this.renderedBGY += 1;
-                this.renderedBGY = this.renderedBGY >= this.canvas.height * -1 ?
-                    this.canvas.height * -2 : this.renderedBGY;
-
-                */
-            }, this.updateFrequency / 3);
-        }
-        this.ctx.globalAlpha = .2;
-        this.ctx.drawImage(this.renderedBackground, this.renderedBGX, this.renderedBGY);
-        this.ctx.globalAlpha = 1;
-        var cvw = this.cvWidths;
-        var cvh = this.cvHeights;
-        this.toggleTextShadow();
-        this.ctx.fillStyle = this.fontColor;
-        // this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
-        this.ctx.font = 10.0 * window.devicePixelRatio + "em \"Monoton\"";
-        this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
-        this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        if (!this.titleScreenEnterPressed) {
-            this.ctx.globalAlpha = this.selectionOpacity;
-            this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
-            this.ctx.globalAlpha = 1;
-        }
-        else {
-            this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
-            for (var optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
-                var option = this.titleScreenOptions[optionIndex];
-                this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
-                if (optionIndex === this.titleScreenSelectedOption) {
-                    // todo: make a select color that is complimentary or contrasts more
-                    this.toggleTextShadow();
-                    this.ctx.fillStyle = this.highlightColorString;
-                    this.ctx.globalAlpha = this.selectionOpacity;
-                    this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
-                    this.ctx.fillStyle = this.fontColor;
-                    this.ctx.globalAlpha = 1;
-                    this.toggleTextShadow();
-                }
-            }
-        }
-        this.ctx.fillStyle = this.fontColor;
-        this.ctx.font = .8 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
-        this.toggleTextShadow();
-    };
     Tetris.prototype.toggleTextShadow = function () {
         // this.ctx.shadowColor = this.bgGradientColorString1;
         this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
         this.ctx.shadowBlur = this.ctx.shadowBlur === 5 ? 0 : 5;
         this.ctx.shadowOffsetY = this.ctx.shadowOffsetY === 2 ? 0 : 2;
-    };
-    Tetris.prototype.drawOverlay = function () {
-        this.ctx.globalAlpha = this.overlayOpacity;
-        this.ctx.fillStyle = this.pauseColor;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.globalAlpha = 1;
     };
     // todo: use this for all state transitions, making use of this.loadOverlayLock
     //  also - what does overlayBehindTheScenesComplete mean now?
@@ -1603,8 +1694,9 @@ var Tetris = /** @class */ (function () {
             this.ctx.globalAlpha = 1;
         }
     };
-    Tetris.prototype.fadeOverlayToBlack = function () {
+    Tetris.prototype.fadeToBlackTransition = function (transitionCallback) {
         var _this = this;
+        if (transitionCallback === void 0) { transitionCallback = null; }
         if (this.loadOverlayOpacityTimer === null) {
             this.loadOverlayFadeUp = true;
             this.loadOverlayLock = true;
@@ -1624,6 +1716,40 @@ var Tetris = /** @class */ (function () {
                         _this.loadOverlayOpacity -= .05;
                     }
                 }
+                else if (transitionCallback !== null) {
+                    transitionCallback();
+                    _this.overlayBehindTheScenesComplete = true;
+                }
+            }, this.updateFrequency);
+        }
+    };
+    // todo: I think these could be made more generic, there's code reuse between this and
+    //  fadeToBlackTransition()
+    Tetris.prototype.fadeMenuTransition = function (transitionCallback) {
+        var _this = this;
+        if (transitionCallback === void 0) { transitionCallback = null; }
+        if (this.menuTransitionTimer === null) {
+            this.menuOpacityFadeOut = true;
+            this.menuTransitionComplete = false;
+            this.menuTransitionTimer = setInterval(function () {
+                _this.menuOpacityFadeOut = _this.menuOpacity <= 0 ? false : _this.menuOpacityFadeOut;
+                if (_this.menuOpacityFadeOut) {
+                    _this.menuOpacity -= .05;
+                }
+                else if (_this.menuTransitionComplete) {
+                    if (_this.menuOpacity >= 1) {
+                        clearInterval(_this.menuTransitionTimer);
+                        _this.menuTransitionTimer = null;
+                        _this.menuOpacity = 1;
+                    }
+                    else {
+                        _this.menuOpacity += .05;
+                    }
+                }
+                else if (transitionCallback !== null) {
+                    transitionCallback();
+                    _this.menuTransitionComplete = true;
+                }
             }, this.updateFrequency);
         }
     };
@@ -1633,34 +1759,12 @@ var Tetris = /** @class */ (function () {
         if (!quickRestart) {
             this.pause();
         }
-        this.fadeOverlayToBlack();
-        if (this.titleScreenTransitionTimer === null) {
-            this.titleScreenTransitionTimer = setInterval(function () {
-                if (!_this.loadOverlayFadeUp) {
-                    // transition to title
-                    //this.endGame(true);
-                    _this.endGame(!quickRestart, quickRestart);
-                    _this.overlayBehindTheScenesComplete = true;
-                    clearInterval(_this.titleScreenTransitionTimer);
-                    _this.titleScreenTransitionTimer = null;
-                }
-            }, this.updateFrequency);
-        }
+        this.fadeToBlackTransition(function () { return _this.endGame(!quickRestart, quickRestart); });
     };
     Tetris.prototype.newGameFromTitle = function (gameType) {
         var _this = this;
         if (gameType === void 0) { gameType = "endless"; }
-        this.fadeOverlayToBlack();
-        if (this.titleScreenTransitionTimer === null) {
-            this.titleScreenTransitionTimer = setInterval(function () {
-                if (!_this.loadOverlayFadeUp) {
-                    _this.newGame(gameType);
-                    _this.overlayBehindTheScenesComplete = true;
-                    clearInterval(_this.titleScreenTransitionTimer);
-                    _this.titleScreenTransitionTimer = null;
-                }
-            }, this.updateFrequency);
-        }
+        this.fadeToBlackTransition(function () { return _this.newGame(gameType); });
     };
     Tetris.prototype.restartGame = function () {
         //this.pause();
