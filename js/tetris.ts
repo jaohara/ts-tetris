@@ -116,7 +116,7 @@ class Tetromino {
 
     private static lockDelayTimer(piece: Tetromino) {
         if (piece.lockPercentage > 99) { // we seem to get 99.99999... instead of 100 at the end
-            //console.log(`Resolving lock delay on ${piece} - lockPercentage: ${piece.lockPercentage}`);
+            //game.log(`Resolving lock delay on ${piece} - lockPercentage: ${piece.lockPercentage}`);
             piece.lockPercentage = 0;
 
             // I guess here we'll just lock the piece, right?
@@ -131,11 +131,11 @@ class Tetromino {
     }
 
     removeLockDelay(): void {
-        //console.log("Removing lock delay...");
+        //game.log("Removing lock delay...");
         clearInterval(this.lockDelay);
         this.lockDelay = null;
         this.lockPercentage = 0;
-        //console.log(`Removed delay on ${this}`);
+        //game.log(`Removed delay on ${this}`);
     }
 
     getGhost(): Tetromino {
@@ -188,23 +188,23 @@ class Tetromino {
         let rotationsAttempted = !this.floorKicked ? 4 : 3;
         let kicksAttempted = this.pieceType === "I" ? 4 : 3;
         let rotationFound = false;
-        //console.log(`Starting rotations: rotationsAttempted = ${rotationsAttempted}, kicksAttempted = ${kicksAttempted}`);
+        //game.log(`Starting rotations: rotationsAttempted = ${rotationsAttempted}, kicksAttempted = ${kicksAttempted}`);
 
         for (let rotation = 0; rotation < rotationsAttempted && !rotationFound; rotation++) {
             let xKick = rotation === 1 ? 1 : 0;
             let yKick = rotation === 3 ? -1 : 0;
             xKick = rotation === 2 ? -1 : xKick;
 
-            // console.log(`\trotation: ${rotation} - xKick, yKick = ${xKick}, ${yKick}`)
+            // game.log(`\trotation: ${rotation} - xKick, yKick = ${xKick}, ${yKick}`)
 
             for (let kick = 1; kick < kicksAttempted && !rotationFound; kick++) {
                 // is this it?
                 newPos = [];
                 validMove = true;
-                // console.log(`\t\tkick attempt ${kick}...`);
+                // game.log(`\t\tkick attempt ${kick}...`);
 
                 for (let i = 0; i < transform.length && validMove; i++) {
-                    // console.log(`\t\ttransform ${i}...`);
+                    // game.log(`\t\ttransform ${i}...`);
 
                     // for rotation transforms, [0] is x, [1] is y (column, row)
                     let blockRotation = transform[i].split(":").map(x => parseInt(x));
@@ -222,7 +222,7 @@ class Tetromino {
 
                     validMove = this.checkValidMove(currentPos);
 
-                    // console.log(`\t\t\tvalidMove = ${validMove}`);
+                    // game.log(`\t\t\tvalidMove = ${validMove}`);
                 }
 
                 rotationFound = validMove;
@@ -235,7 +235,7 @@ class Tetromino {
 
             // reset lock delay
             if (this.lockPercentage > 0){
-                //console.log("Attempting to reset lock delay...");
+                //game.log("Attempting to reset lock delay...");
                 //this.lockPercentage = 0;
                 this.removeLockDelay();
             }
@@ -270,7 +270,7 @@ class Tetromino {
         let validMove = true;
 
         if (direction === "gravity"){
-            //console.log("Moving by gravity...");
+            //game.log("Moving by gravity...");
         }
 
         // check direction and make sure it can move in a certain way
@@ -303,7 +303,7 @@ class Tetromino {
                         this.removeLockDelay();
                     }
                     else {
-                        //console.log("Attempting to reset lock delay...");
+                        //game.log("Attempting to reset lock delay...");
                         //this.lockPercentage = 0;
                         this.removeLockDelay();
                     }
@@ -320,7 +320,7 @@ class Tetromino {
             this.well.lockPiece(this);
         }
         else if (direction === "gravity" && !this.isGhost && this.lockPercentage == 0){
-            //console.log("Non valid move on a real piece due to gravity");
+            //game.log("Non valid move on a real piece due to gravity");
 
             if (this.lockPercentage == 0 && this.lockDelay == null){
                 this.lockDelay = setInterval(() => {Tetromino.lockDelayTimer(this)},
@@ -349,7 +349,7 @@ class Tetromino {
         if (this.moveQueue.size() > 0){
             let nextMove = this.moveQueue.dequeue().split(":");
 
-            console.log(`Dequeued move: ${nextMove.join(":")}`);
+            game.log(`Dequeued move: ${nextMove.join(":")}`);
 
             if (nextMove[0] == "move"){
                 this.move(nextMove[1]);
@@ -461,12 +461,12 @@ class Well {
         // todo: set
 
         if (this.clearAnimationInterval === null) {
-            //console.log("clearLines has been called");
-            //console.log("\tNo animation, checking rows....")
+            //game.log("clearLines has been called");
+            //game.log("\tNo animation, checking rows....")
             //for (let row = this.getHeight() - 1; row > 0; row--) {
             for (let row = 0; row < this.getHeight(); row++) {
                 if (!this.grid[row].includes(0)) {
-                    console.log(`\t\tFound a row to clear! - row ${row}`)
+                    game.log(`\t\tFound a row to clear! - row ${row}`)
                     this.rowsClearing.push(row);
                 }
             }
@@ -474,18 +474,18 @@ class Well {
 
         if (this.rowsClearing.length > 0) {
             if (this.clearAnimationInterval === null) {
-                console.log("\tRows found with no existing animation...")
-                console.log(`\t\tRows clearing: ${this.rowsClearing}`);
-                console.log(`\t\tRows cleared: ${this.rowsCleared}`);
+                game.log("\tRows found with no existing animation...")
+                game.log(`\t\tRows clearing: ${this.rowsClearing}`);
+                game.log(`\t\tRows cleared: ${this.rowsCleared}`);
                 this.clearAnimationInterval = setInterval(() => {
-                    //console.log("\tclearAnimationInterval is running...");
+                    //game.log("\tclearAnimationInterval is running...");
                     if (this.clearAlpha < 1.0) {
                         // ten frames to white? twenty?
                         this.clearAlpha += .1;
                     } else {
                         // probably going to need another "else if" for the next animation step if I want one
                         if (!this.clearAnimationCompleting) {
-                            console.log("\tFINAL STATE - clearAnimationInterval");
+                            game.log("\tFINAL STATE - clearAnimationInterval");
                             this.clearAnimationCompleting = true;
                             clearInterval(this.clearAnimationInterval);
                             this.clearAnimationInterval = null;
@@ -495,7 +495,7 @@ class Well {
 
                             for (let row of this.rowsClearing) {
                                 if (!this.rowsCleared.includes(row)) {
-                                    console.log(`Clearing Row ${row}...`);
+                                    game.log(`Clearing Row ${row}...`);
                                     this.rowsCleared.push(row);
                                     this.game.lineClear();
                                     this.grid.splice(row, 1);
@@ -528,7 +528,7 @@ class Well {
 
                             this.game.addMessage(scoreMessage, this.rowsClearing.length === 4);
 
-                            console.log(`linesCleared: ${this.rowsClearing.length} - lineScore: ${lineScore}`);
+                            game.log(`linesCleared: ${this.rowsClearing.length} - lineScore: ${lineScore}`);
 
                             // reset the row clear animation
                             this.clearAnimationCompleting = false;
@@ -869,6 +869,7 @@ class Tetris {
     private readonly bezierColor1   = '#3498db';
     private readonly bezierColor2   = '#68e4b6';
     private readonly borderColor    = '#bbb';
+    private currentFPS: number      = 0;
     private highlightColor          = {'h': 21, 's': 84, 'l': 36};
     private highlightColorString    = 'hsl(21, 84%, 36%)';
     private highlightColorTarget    = 21;
@@ -882,10 +883,12 @@ class Tetris {
         '#1b1d24', '#3498db', '#273ac5', '#e97e03',
         '#edcc30', '#13be3d', '#b84cd8', '#ec334d'];
 
-    // graphics/debug options
+    // debug options
+    private debugLog: boolean = false;
     private noGravity: boolean = false;
     private noBackground: boolean = false;
     private pieceGlow: boolean = false;     // todo: make this more performant so it can be on by default
+    private showFPS: boolean = false;
     private simpleBackground: boolean = true;
     private testRenderMinos: boolean = false;
 
@@ -1020,11 +1023,17 @@ class Tetris {
                 else {
                     // in-game state
 
+
+                    // update framerate count
+                    let currentFrametime    = Date.now() - this.previousLoopTime;
+                    this.currentFPS         = (1000 / currentFrametime);
+
                     // update loop timer
                     if (!this.paused) {
                         this.previousLoopTime = isNaN(this.previousLoopTime) ? Date.now() : this.previousLoopTime;
-                        this.elapsedTime += Date.now() - this.previousLoopTime;
+                        this.elapsedTime += currentFrametime;
                     }
+
                     this.previousLoopTime = Date.now();
 
                     // check for gamepad input
@@ -1034,7 +1043,7 @@ class Tetris {
 
                     // DEBUG: report state current locking piece if it exists
                     if (this.activePiece !== null && this.activePiece.getLockPercentage() > 0) {
-                        console.log(`activePiece locking: ${this.activePiece.getLockPercentage()}%`);
+                        game.log(`activePiece locking: ${this.activePiece.getLockPercentage()}%`);
                     }
 
                     if (!this.titleScreen && !this.paused && !this.gameOver) {
@@ -1104,7 +1113,7 @@ class Tetris {
             }, this.updateFrequency);
         }
         else {
-            console.log("Game is already running.");
+            game.log("Game is already running.");
         }
     }
 
@@ -1171,7 +1180,7 @@ class Tetris {
                 this.pause();
             }
         } else {
-            console.log("Game isn't running.");
+            game.log("Game isn't running.");
         }
     }
     // todo: have a pause menu controllable by arrow keys
@@ -1179,7 +1188,7 @@ class Tetris {
     pause(skipFade: boolean = false): void {
         this.paused = !this.paused;
         this.pauseOverlay = !skipFade;
-        console.log(`game ${this.paused ? "paused" : "unpaused"}`);
+        game.log(`game ${this.paused ? "paused" : "unpaused"}`);
 
         clearInterval(this.overlayOpacityTimer);
         this.overlayOpacityTimer = null;
@@ -1208,7 +1217,7 @@ class Tetris {
     }
 
     private static pollInput(event: KeyboardEvent = null, input: string = null, gamepadSource: boolean = false): void {
-        //console.log(`event: ${event}, input: ${input}`);
+        //game.log(`event: ${event}, input: ${input}`);
 
         // my logic seems redundant here but I dunno
         if (event !== null) {
@@ -1319,38 +1328,47 @@ class Tetris {
                         game.restartGame();
                     }
                     else if (game.gameOverSelectedOption === 1) {
-                        game.quitToTitle();
+                        game.quitToTitle(false, true);
                     }
                 }
             }
-        } else if (game.debugControls.includes(input)){
+        }
+        else if (game.debugControls.includes(input)){
             event.preventDefault();
 
             if (input === "0") {
-                game.noBackground = !game.noBackground;
+                game.debugLog = !game.debugLog;
+                game.addMessage(`DEBUG LOGGING ${game.debugLog ? "EN" : "DIS"}ABLED`);
             }
             else if (input === "9") {
-                game.simpleBackground = !game.simpleBackground;
+                game.noBackground = !game.noBackground;
+                game.addMessage(`BACKGROUND ${game.noBackground ? "DIS" : "EN"}ABLED`);
             }
             else if (input === "8") {
                 game.testRenderMinos = !game.testRenderMinos;
+                game.addMessage(`TEST MINOS ${game.testRenderMinos ? "EN" : "DIS"}ABLED`);
             }
             else if (input === "7") {
                 game.noGravity = !game.noGravity;
+                game.addMessage(`GRAVITY ${game.noGravity ? "DIS" : "EN"}ABLED`);
             }
             else if (input === "6") {
                 game.pieceGlow = !game.pieceGlow;
+                game.addMessage(`PIECE GLOW ${game.pieceGlow ? "EN" : "DIS"}ABLED`);
             }
             else if (input === "5") {
-                game.messenger.addMessage("Test message!", true);
+                game.showFPS = !game.showFPS;
+                game.addMessage(`FPS DISPLAY ${game.showFPS ? "EN" : "DIS"}ABLED`);
             }
             else if (input === "PageUp") {
                 game.linesCleared += 10;
+                game.addMessage(`ADDED 10 LINES`);
             }
             else if (input === "PageDown") {
                 if (game.linesCleared >= 10 && game.gameLevel > 1){
                     game.linesCleared -= 10;
                     game.gameLevel--;
+                    game.addMessage(`REMOVED 10 LINES`);
                 }
             }
         }
@@ -1392,7 +1410,7 @@ class Tetris {
         game.gamepadConnected = connected;
         game.gamepad = connected ? event.gamepad : null;
         game.gamepadIndex = game.gamepad.index;
-        console.log(`Gamepad[${game.gamepadIndex}] ${connected? "" : "dis"}connected`);
+        game.log(`Gamepad[${game.gamepadIndex}] ${connected? "" : "dis"}connected`);
     }
 
     private static clearLastFrameAction() {
@@ -1414,7 +1432,7 @@ class Tetris {
 
     private newPiece(): void {
         let newPieceType = this.pieceBag.pop();
-        console.log(`Generating new piece: ${newPieceType} - Remaining in pieceBag: ${this.pieceBag}`);
+        game.log(`Generating new piece: ${newPieceType} - Remaining in pieceBag: ${this.pieceBag}`);
         //this.activePiece.removeLockDelay();
         this.activePiece = new Tetromino(newPieceType, game, this.well);
         this.ghostPiece  = this.activePiece.getGhost();
@@ -1430,8 +1448,7 @@ class Tetris {
             clearInterval(this.activePiece.gravity);
             this.activePiece.gravity = null;
 
-
-            console.log(`Holding ${this.activePiece}, swapping for ${this.heldPiece}`);
+            game.log(`Holding ${this.activePiece}, swapping for ${this.heldPiece}`);
             // did reordering these steps change the lockdelay bug?
             this.activePiece.removeLockDelay();
             let tempPiece = this.activePiece;
@@ -1448,7 +1465,7 @@ class Tetris {
     }
 
     lockActivePiece() {
-        console.log(`Locking active piece: ${this.activePiece}`);
+        game.log(`Locking active piece: ${this.activePiece}`);
         clearInterval(this.activePiece.gravity);
         this.activePiece = null;
         this.ghostPiece = null;
@@ -2047,6 +2064,14 @@ class Tetris {
                     yPos += mino.height;
                 }
             }
+
+            // show fps
+            if (this.showFPS === true) {
+                let previousFillStyle = this.ctx.fillStyle;
+                this.ctx.fillStyle = this.highlightColorString;
+                this.ctx.fillText(`FPS: ${this.currentFPS.toFixed(2)}`, cvw.c12, cvh.c24);
+                this.ctx.fillStyle = previousFillStyle;
+            }
         }
         else if (this.titleScreen) {
             this.drawTitle();
@@ -2067,7 +2092,7 @@ class Tetris {
     //  also - what does overlayBehindTheScenesComplete mean now?
     private drawLoadOverlay() {
         if (this.loadOverlayOpacityTimer !== null) {
-            console.log(`loadOverlayOpacity: ${this.loadOverlayOpacity}`);
+            game.log(`loadOverlayOpacity: ${this.loadOverlayOpacity}`);
         }
 
         // This seems to fix the stutter bug - it was a very small negative opacity
@@ -2143,8 +2168,8 @@ class Tetris {
         }
     }
 
-    private quitToTitle(quickRestart: boolean = false) {
-        if (!quickRestart) {
+    private quitToTitle(quickRestart: boolean = false, fromGameOver: boolean = false) {
+        if (!quickRestart && !fromGameOver) {
             this.pause();
         }
 
@@ -2243,6 +2268,12 @@ class Tetris {
         }
 
         return pieceBag;
+    }
+
+    log(message: string) {
+        if (this.debugLog) {
+            console.log(message);
+        }
     }
 }
 
