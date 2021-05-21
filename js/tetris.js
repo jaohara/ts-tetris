@@ -706,6 +706,7 @@ var Tetris = /** @class */ (function () {
         this.showFPS = false;
         this.simpleBackground = true;
         this.testRenderMinos = false;
+        this.gameVersion = "0.8.9";
         // setup canvas with proper scaling
         this.canvas = document.getElementById("main-canvas");
         var width = this.canvas.width;
@@ -1589,7 +1590,7 @@ var Tetris = /** @class */ (function () {
         if (!this.titleScreenEnterPressed) {
             this.ctx.globalAlpha = this.menuOpacity < 1 ? this.menuOpacity : this.selectionOpacity;
             this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.ctx.globalAlpha;
-            this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
+            this.ctx.fillText("Press Enter / Space to Start", cvw.c2, cvh.c3 * 2);
         }
         else {
             this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
@@ -1627,7 +1628,7 @@ var Tetris = /** @class */ (function () {
         this.ctx.fillStyle = this.fontColor;
         this.ctx.font = .8 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
         this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c12);
-        this.ctx.fillText("Version 0.8.5", cvw.c2, cvh.c1 - cvh.c24);
+        this.ctx.fillText("Version " + this.gameVersion, cvw.c2, cvh.c1 - cvh.c24);
         this.toggleTextShadow();
     };
     Tetris.prototype.drawUI = function (sinOffset, cosOffset) {
@@ -1941,7 +1942,7 @@ var Tetris = /** @class */ (function () {
         if (!this.muteSound) {
             if (sound in this.audioPrompts) {
                 // this seems to be a magic number to kill delay?
-                this.audioPrompts[sound].currentTime = 0.08;
+                this.audioPrompts[sound].currentTime = 0.07;
                 this.audioPrompts[sound].play();
             }
         }
