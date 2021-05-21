@@ -482,7 +482,13 @@ class Well {
                     if (this.clearAlpha < 1.0) {
                         // ten frames to white? twenty?
                         this.clearAlpha += .1;
-                    } else {
+
+                        // jump the gun on audio to kill some lag
+                        if (this.clearAlpha > .8) {
+                            this.game.playSound("clear");
+                        }
+                    }
+                    else {
                         // probably going to need another "else if" for the next animation step if I want one
                         if (!this.clearAnimationCompleting) {
                             game.log("\tFINAL STATE - clearAnimationInterval");
@@ -768,7 +774,7 @@ class Tetris {
 
     private readonly controls = [
         "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
-        "e", "n", "Enter"
+        "e", "n", "Enter", "m"
     ];
 
     private readonly debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown"];
@@ -819,19 +825,26 @@ class Tetris {
     private titleScreen: boolean = true;
 
     // menu stuff
-    private allMenus            = ["Title", "Start", "Options"];
-    private configOptions       = []; // todo: maybe make this an object?
-    private configSelectedOption: number = 0;
-    private currentMenu         = "Title";
-    private gameOverOptions     = ["Retry", "Quit"];
+    private allMenus                = ["Title", "Start", "Options"];
+    private configOptions           = []; // todo: maybe make this an object?
+    private configSelectedOption    = 0;
+    private currentMenu             = "Title";
+    private gameModeOptions         = ["Marathon", "Endless", "Sprint", "Ultra"];
+    private gameModeDescriptions    = {
+        "Marathon": "Clear 150 lines to win!",
+        "Endless": "See how far you can go without dying - just like real life!",
+        "Sprint": "Clear 40 lines as fast as possible!",
+        "Ultra": "Get the highest score possible in 3 minutes!",
+    }
+    private gameModeSelectedOption  = 0;
+    private gameOverOptions         = ["Retry", "Quit"];
     private gameOverSelectedOption: number = 0;
-    private pauseScreenOptions  = ["Resume", "Restart", "Options", "Quit"];
+    private pauseScreenOptions      = ["Resume", "Restart", /*"Options",*/ "Quit"]; // todo: config options
     private pauseScreenSelectedOption: number = 0;
     private selectionOpacity: number;
-    private startOptions        = ["Classic", "Endless", "Sprint"];
     private titleScreenDisplay: boolean = true;
-    private titleScreenEnterPressed = false;
-    private titleScreenOptions  = ["Start", "Options"]
+    private titleScreenEnterPressed  = false;
+    private titleScreenOptions      = ["Start", "Options"]
     private titleScreenSelectedOption: number = 0;
 
 
@@ -875,7 +888,8 @@ class Tetris {
     private highlightColorTarget    = 21;
     private readonly pauseColor     = '#000';
     // private readonly gameFont       = 'Poppins';
-    private readonly gameFont       = 'Righteous';
+    // private readonly gameFont       = 'Righteous';
+    private readonly gameFont       = 'Fira Sans';
     private pauseOverlay: boolean;
     private readonly fontColor      = '#bbb';
     private readonly gridColor      = '#9b9ba9';
@@ -883,8 +897,28 @@ class Tetris {
         '#1b1d24', '#3498db', '#273ac5', '#e97e03',
         '#edcc30', '#13be3d', '#b84cd8', '#ec334d'];
 
+
+    // sound stuff
+
+    /*
+        audio/load.wav          - start pressed on title / Line Clear?
+        audio/misc_menu_2.wav   - menu option changed
+        audio/misc_menu_4.wav   - menu option selected
+        audio/misc_menu.wav     - Escape on title menu
+        audio/sharp_echo.wav    - Pause Menu (only engaged though?)
+     */
+
+    private readonly audioBack: HTMLAudioElement;
+    private readonly audioChange: HTMLAudioElement;
+    private readonly audioLevelUp: HTMLAudioElement;
+    private readonly audioPause: HTMLAudioElement;
+    private readonly audioSelect: HTMLAudioElement;
+    private readonly audioStart: HTMLAudioElement;
+    private readonly audioPrompts: Object;
+
     // debug options
     private debugLog: boolean = false;
+    private muteSound: boolean = false;
     private noGravity: boolean = false;
     private noBackground: boolean = false;
     private pieceGlow: boolean = false;     // todo: make this more performant so it can be on by default
@@ -980,6 +1014,32 @@ class Tetris {
         // setup ScoreMessenger
         this.messenger = new ScoreMessenger(this.ctx, this.cvHeights.c3, this.cvWidths.c2, this.colorArray);
 
+        // load sounds
+        this.audioBack = new Audio('audio/misc_menu.wav');
+        this.audioChange = new Audio('audio/misc_menu_2.wav');
+        this.audioLevelUp = new Audio('audio/MenuPack/MESSAGE-B_Accept.wav');
+        this.audioPause = new Audio('audio/sharp_echo.wav');
+        this.audioSelect = new Audio('audio/misc_menu_4.wav');
+        this.audioStart = new Audio('audio/load.wav');
+
+        this.audioBack.preload = 'auto';
+        this.audioChange.preload = 'auto';
+        this.audioLevelUp.preload = 'auto';
+        this.audioPause.preload = 'auto';
+        this.audioSelect.preload = 'auto';
+        this.audioStart.preload = 'auto';
+
+
+        this.audioPrompts = {
+            back: this.audioBack,
+            change: this.audioChange,
+            clear: this.audioStart,
+            levelup: this.audioLevelUp,
+            pause: this.audioPause,
+            select: this.audioSelect,
+            start: this.audioStart,
+        };
+
         this.start();
     }
 
@@ -1049,6 +1109,7 @@ class Tetris {
                     if (!this.titleScreen && !this.paused && !this.gameOver) {
                         // check for levelup
                         if (Math.floor(this.linesCleared / 10) + 1 > this.gameLevel && this.gameLevel < 15) {
+                            game.playSound("levelup");
                             this.gameLevel++;
 
                             // stagger message so it isn't simultaneous with line clear
@@ -1118,11 +1179,15 @@ class Tetris {
     }
 
     // what's up with this vs the state reset in endGame? should I keep part of this?
-    private newGame(gameType: string = "endless"): void{
+    private newGame(gameType: string = "Endless", gameLevel: number = 1): void{
+        // super debug, remove
+        console.log(gameType);
+
+        this.currentMenu = "Title";
         this.displayScore = 0;
         this.elapsedTime = 0;
-        // todo: allow for starting at a higher level?
-        this.gameLevel = 1;
+        this.gameLevel = gameLevel;
+        game.gameModeSelectedOption = 0;
         this.gameOver = false;
         this.newHighScore = false;
         this.linesCleared = 0;
@@ -1130,6 +1195,7 @@ class Tetris {
         this.score = 0;
         this.titleScreen = false;
         this.titleScreenEnterPressed = false;
+        game.titleScreenSelectedOption = 0;
         this.well.resetWell();
     }
 
@@ -1224,6 +1290,7 @@ class Tetris {
             input = event.key;
         }
 
+
         if (game.controls.includes(input)) {
             if (event !== null) {
                 event.preventDefault();
@@ -1231,9 +1298,15 @@ class Tetris {
 
             input = input.includes("Arrow") ? input.slice(5).toLowerCase() : input;
 
+            if (input === "m") {
+                game.muteSound = !game.muteSound;
+                game.addMessage(`SOUND ${game.muteSound ? "" : "UN"}MUTED`);
+            }
+
             if (!game.titleScreen && !game.gameOver) {
                 // Toggle Pause Keys
                 if (input === "Escape" || input === "p") {
+                    game.playSound("pause");
                     game.pause();
                 }
                 // Gameplay Controls
@@ -1269,7 +1342,8 @@ class Tetris {
                         game.lastFrameAction = game.lastFrameAction === input ? null : input;
                     }
                     // confirm pause menu option
-                    else if (input === "Enter") {
+                    else if (input === "Enter" || input === " ") {
+                        game.playSound("select");
                         let option = game.pauseScreenOptions[game.pauseScreenSelectedOption];
 
                         if (option === "Resume") {
@@ -1288,28 +1362,46 @@ class Tetris {
             }
             // title screen and game over controls
             else {
-                if (game.titleScreen && (input === "Enter" || input === "n" ||
+                if (game.titleScreen && (input === "Enter" || input === "n" || input === " " ||
                     gamepadSource && (input === "Escape" || input === "ArrowUp"))){
                     if (!game.titleScreenEnterPressed) {
+                        game.playSound("start");
                         game.fadeMenuTransition(() => {
                             game.titleScreenEnterPressed = true;
                         });
                         //game.titleScreenEnterPressed = true;
                     }
-                    else if (game.titleScreenSelectedOption === 0){
-                        //game.newGame();
-                        game.newGameFromTitle();
+                    else if (game.currentMenu === "Title"){
+                        if (game.titleScreenSelectedOption === 0) {
+                            game.playSound("select");
+
+                            game.fadeMenuTransition(() => {
+                                game.currentMenu = "Start";
+                            });
+                        }
+                    }
+                    else if (game.currentMenu === "Start") {
+                        game.playSound("select");
+                        game.newGameFromTitle(game.gameModeOptions[game.gameModeSelectedOption]);
                     }
                 }
                 else if (input === "Escape" && game.titleScreenEnterPressed) {
+                    game.playSound("back");
                     game.fadeMenuTransition(() => {
-                        game.titleScreenEnterPressed = false;
+                        game.titleScreenEnterPressed = game.currentMenu !== "Title";
+                        game.currentMenu = "Title";
                     });
                 }
                 else if (game.titleScreenEnterPressed && (input === "up" || input === "down")) {
                     if (game.lastFrameAction !== input) {
-                        game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption,
-                            game.titleScreenOptions.length, input);
+                        if (game.currentMenu === "Title") {
+                            game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption,
+                                game.titleScreenOptions.length, input);
+                        }
+                        else if (game.currentMenu === "Start") {
+                            game.gameModeSelectedOption = Tetris.changeOption(game.gameModeSelectedOption,
+                                game.gameModeOptions.length, input);
+                        }
                     }
 
                     game.lastFrameAction = game.lastFrameAction === input ? null : input;
@@ -1335,6 +1427,8 @@ class Tetris {
         }
         else if (game.debugControls.includes(input)){
             event.preventDefault();
+
+            game.playSound("select");
 
             if (input === "0") {
                 game.debugLog = !game.debugLog;
@@ -1427,6 +1521,7 @@ class Tetris {
             option = option < 0 ? bounds - 1 : option;
         }
 
+        game.playSound("change");
         return option;
     }
 
@@ -1873,16 +1968,35 @@ class Tetris {
             this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.ctx.globalAlpha;
             this.ctx.fillText("Press Enter to Start", cvw.c2, cvh.c3 * 2);
         }
-        else {
+        else  {
             this.ctx.font = `${1.4 * window.devicePixelRatio}em ${this.gameFont}`;
 
-            for (let optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
-                let option = this.titleScreenOptions[optionIndex];
+            // todo: Need to account for the menu at some point
+            let currentMenu = this.currentMenu === "Title" ?
+                this.titleScreenOptions : this.gameModeOptions;
+            let currentSelectedOption = this.currentMenu === "Title" ?
+                this.titleScreenSelectedOption : this.gameModeSelectedOption;
+
+            for (let optionIndex = 0; optionIndex < currentMenu.length; optionIndex++) {
+                let option = currentMenu[optionIndex];
                 this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.menuOpacity;
+
+                // todo: REMOVE WHEN OPTION MENU IS CODED
+                if (this.currentMenu === "Title" && option === "Options") {
+                    this.ctx.globalAlpha *= .4;
+                }
 
                 this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
 
-                if (optionIndex === this.titleScreenSelectedOption) {
+                if (this.currentMenu === "Start") {
+                    this.ctx.font = `${.8 * window.devicePixelRatio}em ${this.gameFont}`;
+                    this.ctx.fillText(this.gameModeDescriptions[option], cvw.c2,
+                        cvh.c2 + cvh.c12 * optionIndex + cvh.c24 * .75);
+                    this.ctx.font = `${1.4 * window.devicePixelRatio}em ${this.gameFont}`;
+                }
+
+                // if (optionIndex === this.titleScreenSelectedOption) {
+                if (optionIndex === currentSelectedOption) {
                     this.toggleTextShadow();
                     this.ctx.fillStyle = this.highlightColorString;
                     this.ctx.globalAlpha = this.selectionOpacity * this.menuOpacity;
@@ -1897,7 +2011,8 @@ class Tetris {
         this.ctx.globalAlpha = 1;
         this.ctx.fillStyle = this.fontColor;
         this.ctx.font = `${.8 * window.devicePixelRatio}em "${this.gameFont}"`;
-        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
+        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c12);
+        this.ctx.fillText("Version 0.8.5", cvw.c2, cvh.c1 - cvh.c24);
 
         this.toggleTextShadow();
     }
@@ -2273,6 +2388,16 @@ class Tetris {
     log(message: string) {
         if (this.debugLog) {
             console.log(message);
+        }
+    }
+
+    playSound(sound: string) {
+        if (!this.muteSound) {
+            if (sound in this.audioPrompts) {
+                // this seems to be a magic number to kill delay?
+                this.audioPrompts[sound].currentTime = 0.08;
+                this.audioPrompts[sound].play();
+            }
         }
     }
 }

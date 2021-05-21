@@ -413,6 +413,10 @@ var Well = /** @class */ (function () {
                     if (_this.clearAlpha < 1.0) {
                         // ten frames to white? twenty?
                         _this.clearAlpha += .1;
+                        // jump the gun on audio to kill some lag
+                        if (_this.clearAlpha > .8) {
+                            _this.game.playSound("clear");
+                        }
                     }
                     else {
                         // probably going to need another "else if" for the next animation step if I want one
@@ -608,7 +612,7 @@ var Tetris = /** @class */ (function () {
         this.updateFrequency = 1000 / this.frameRate;
         this.controls = [
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
-            "e", "n", "Enter"
+            "e", "n", "Enter", "m"
         ];
         this.debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown"];
         // game state
@@ -632,11 +636,18 @@ var Tetris = /** @class */ (function () {
         this.configOptions = []; // todo: maybe make this an object?
         this.configSelectedOption = 0;
         this.currentMenu = "Title";
+        this.gameModeOptions = ["Marathon", "Endless", "Sprint", "Ultra"];
+        this.gameModeDescriptions = {
+            "Marathon": "Clear 150 lines to win!",
+            "Endless": "See how far you can go without dying - just like real life!",
+            "Sprint": "Clear 40 lines as fast as possible!",
+            "Ultra": "Get the highest score possible in 3 minutes!"
+        };
+        this.gameModeSelectedOption = 0;
         this.gameOverOptions = ["Retry", "Quit"];
         this.gameOverSelectedOption = 0;
-        this.pauseScreenOptions = ["Resume", "Restart", "Options", "Quit"];
+        this.pauseScreenOptions = ["Resume", "Restart", /*"Options",*/ "Quit"]; // todo: config options
         this.pauseScreenSelectedOption = 0;
-        this.startOptions = ["Classic", "Endless", "Sprint"];
         this.titleScreenDisplay = true;
         this.titleScreenEnterPressed = false;
         this.titleScreenOptions = ["Start", "Options"];
@@ -678,7 +689,8 @@ var Tetris = /** @class */ (function () {
         this.highlightColorTarget = 21;
         this.pauseColor = '#000';
         // private readonly gameFont       = 'Poppins';
-        this.gameFont = 'Righteous';
+        // private readonly gameFont       = 'Righteous';
+        this.gameFont = 'Fira Sans';
         this.fontColor = '#bbb';
         this.gridColor = '#9b9ba9';
         this.colorArray = [
@@ -687,6 +699,7 @@ var Tetris = /** @class */ (function () {
         ];
         // debug options
         this.debugLog = false;
+        this.muteSound = false;
         this.noGravity = false;
         this.noBackground = false;
         this.pieceGlow = false; // todo: make this more performant so it can be on by default
@@ -761,6 +774,28 @@ var Tetris = /** @class */ (function () {
         this.highScore = localHighScore !== null ? parseInt(localHighScore) : 16000;
         // setup ScoreMessenger
         this.messenger = new ScoreMessenger(this.ctx, this.cvHeights.c3, this.cvWidths.c2, this.colorArray);
+        // load sounds
+        this.audioBack = new Audio('audio/misc_menu.wav');
+        this.audioChange = new Audio('audio/misc_menu_2.wav');
+        this.audioLevelUp = new Audio('audio/MenuPack/MESSAGE-B_Accept.wav');
+        this.audioPause = new Audio('audio/sharp_echo.wav');
+        this.audioSelect = new Audio('audio/misc_menu_4.wav');
+        this.audioStart = new Audio('audio/load.wav');
+        this.audioBack.preload = 'auto';
+        this.audioChange.preload = 'auto';
+        this.audioLevelUp.preload = 'auto';
+        this.audioPause.preload = 'auto';
+        this.audioSelect.preload = 'auto';
+        this.audioStart.preload = 'auto';
+        this.audioPrompts = {
+            back: this.audioBack,
+            change: this.audioChange,
+            clear: this.audioStart,
+            levelup: this.audioLevelUp,
+            pause: this.audioPause,
+            select: this.audioSelect,
+            start: this.audioStart
+        };
         this.start();
     }
     Tetris.prototype.start = function () {
@@ -818,6 +853,7 @@ var Tetris = /** @class */ (function () {
                     if (!_this.titleScreen && !_this.paused && !_this.gameOver) {
                         // check for levelup
                         if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
+                            game.playSound("levelup");
                             _this.gameLevel++;
                             // stagger message so it isn't simultaneous with line clear
                             setTimeout(function () {
@@ -877,12 +913,16 @@ var Tetris = /** @class */ (function () {
         }
     };
     // what's up with this vs the state reset in endGame? should I keep part of this?
-    Tetris.prototype.newGame = function (gameType) {
-        if (gameType === void 0) { gameType = "endless"; }
+    Tetris.prototype.newGame = function (gameType, gameLevel) {
+        if (gameType === void 0) { gameType = "Endless"; }
+        if (gameLevel === void 0) { gameLevel = 1; }
+        // super debug, remove
+        console.log(gameType);
+        this.currentMenu = "Title";
         this.displayScore = 0;
         this.elapsedTime = 0;
-        // todo: allow for starting at a higher level?
-        this.gameLevel = 1;
+        this.gameLevel = gameLevel;
+        game.gameModeSelectedOption = 0;
         this.gameOver = false;
         this.newHighScore = false;
         this.linesCleared = 0;
@@ -890,6 +930,7 @@ var Tetris = /** @class */ (function () {
         this.score = 0;
         this.titleScreen = false;
         this.titleScreenEnterPressed = false;
+        game.titleScreenSelectedOption = 0;
         this.well.resetWell();
     };
     Tetris.prototype.endGame = function (quitToTitle, restart) {
@@ -979,9 +1020,14 @@ var Tetris = /** @class */ (function () {
                 event.preventDefault();
             }
             input = input.includes("Arrow") ? input.slice(5).toLowerCase() : input;
+            if (input === "m") {
+                game.muteSound = !game.muteSound;
+                game.addMessage("SOUND " + (game.muteSound ? "" : "UN") + "MUTED");
+            }
             if (!game.titleScreen && !game.gameOver) {
                 // Toggle Pause Keys
                 if (input === "Escape" || input === "p") {
+                    game.playSound("pause");
                     game.pause();
                 }
                 // Gameplay Controls
@@ -1019,7 +1065,8 @@ var Tetris = /** @class */ (function () {
                         game.lastFrameAction = game.lastFrameAction === input ? null : input;
                     }
                     // confirm pause menu option
-                    else if (input === "Enter") {
+                    else if (input === "Enter" || input === " ") {
+                        game.playSound("select");
                         var option = game.pauseScreenOptions[game.pauseScreenSelectedOption];
                         if (option === "Resume") {
                             game.pause();
@@ -1037,27 +1084,43 @@ var Tetris = /** @class */ (function () {
             }
             // title screen and game over controls
             else {
-                if (game.titleScreen && (input === "Enter" || input === "n" ||
+                if (game.titleScreen && (input === "Enter" || input === "n" || input === " " ||
                     gamepadSource && (input === "Escape" || input === "ArrowUp"))) {
                     if (!game.titleScreenEnterPressed) {
+                        game.playSound("start");
                         game.fadeMenuTransition(function () {
                             game.titleScreenEnterPressed = true;
                         });
                         //game.titleScreenEnterPressed = true;
                     }
-                    else if (game.titleScreenSelectedOption === 0) {
-                        //game.newGame();
-                        game.newGameFromTitle();
+                    else if (game.currentMenu === "Title") {
+                        if (game.titleScreenSelectedOption === 0) {
+                            game.playSound("select");
+                            game.fadeMenuTransition(function () {
+                                game.currentMenu = "Start";
+                            });
+                        }
+                    }
+                    else if (game.currentMenu === "Start") {
+                        game.playSound("select");
+                        game.newGameFromTitle(game.gameModeOptions[game.gameModeSelectedOption]);
                     }
                 }
                 else if (input === "Escape" && game.titleScreenEnterPressed) {
+                    game.playSound("back");
                     game.fadeMenuTransition(function () {
-                        game.titleScreenEnterPressed = false;
+                        game.titleScreenEnterPressed = game.currentMenu !== "Title";
+                        game.currentMenu = "Title";
                     });
                 }
                 else if (game.titleScreenEnterPressed && (input === "up" || input === "down")) {
                     if (game.lastFrameAction !== input) {
-                        game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption, game.titleScreenOptions.length, input);
+                        if (game.currentMenu === "Title") {
+                            game.titleScreenSelectedOption = Tetris.changeOption(game.titleScreenSelectedOption, game.titleScreenOptions.length, input);
+                        }
+                        else if (game.currentMenu === "Start") {
+                            game.gameModeSelectedOption = Tetris.changeOption(game.gameModeSelectedOption, game.gameModeOptions.length, input);
+                        }
                     }
                     game.lastFrameAction = game.lastFrameAction === input ? null : input;
                 }
@@ -1080,6 +1143,7 @@ var Tetris = /** @class */ (function () {
         }
         else if (game.debugControls.includes(input)) {
             event.preventDefault();
+            game.playSound("select");
             if (input === "0") {
                 game.debugLog = !game.debugLog;
                 game.addMessage("DEBUG LOGGING " + (game.debugLog ? "EN" : "DIS") + "ABLED");
@@ -1164,6 +1228,7 @@ var Tetris = /** @class */ (function () {
         else {
             option = option < 0 ? bounds - 1 : option;
         }
+        game.playSound("change");
         return option;
     };
     Tetris.prototype.newPiece = function () {
@@ -1528,11 +1593,26 @@ var Tetris = /** @class */ (function () {
         }
         else {
             this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
-            for (var optionIndex = 0; optionIndex < this.titleScreenOptions.length; optionIndex++) {
-                var option = this.titleScreenOptions[optionIndex];
+            // todo: Need to account for the menu at some point
+            var currentMenu = this.currentMenu === "Title" ?
+                this.titleScreenOptions : this.gameModeOptions;
+            var currentSelectedOption = this.currentMenu === "Title" ?
+                this.titleScreenSelectedOption : this.gameModeSelectedOption;
+            for (var optionIndex = 0; optionIndex < currentMenu.length; optionIndex++) {
+                var option = currentMenu[optionIndex];
                 this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.menuOpacity;
+                // todo: REMOVE WHEN OPTION MENU IS CODED
+                if (this.currentMenu === "Title" && option === "Options") {
+                    this.ctx.globalAlpha *= .4;
+                }
                 this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
-                if (optionIndex === this.titleScreenSelectedOption) {
+                if (this.currentMenu === "Start") {
+                    this.ctx.font = .8 * window.devicePixelRatio + "em " + this.gameFont;
+                    this.ctx.fillText(this.gameModeDescriptions[option], cvw.c2, cvh.c2 + cvh.c12 * optionIndex + cvh.c24 * .75);
+                    this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
+                }
+                // if (optionIndex === this.titleScreenSelectedOption) {
+                if (optionIndex === currentSelectedOption) {
                     this.toggleTextShadow();
                     this.ctx.fillStyle = this.highlightColorString;
                     this.ctx.globalAlpha = this.selectionOpacity * this.menuOpacity;
@@ -1546,7 +1626,8 @@ var Tetris = /** @class */ (function () {
         this.ctx.globalAlpha = 1;
         this.ctx.fillStyle = this.fontColor;
         this.ctx.font = .8 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c24);
+        this.ctx.fillText("Programmed by John O'Hara in 2021", cvw.c2, cvh.c1 - cvh.c12);
+        this.ctx.fillText("Version 0.8.5", cvw.c2, cvh.c1 - cvh.c24);
         this.toggleTextShadow();
     };
     Tetris.prototype.drawUI = function (sinOffset, cosOffset) {
@@ -1854,6 +1935,15 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.log = function (message) {
         if (this.debugLog) {
             console.log(message);
+        }
+    };
+    Tetris.prototype.playSound = function (sound) {
+        if (!this.muteSound) {
+            if (sound in this.audioPrompts) {
+                // this seems to be a magic number to kill delay?
+                this.audioPrompts[sound].currentTime = 0.08;
+                this.audioPrompts[sound].play();
+            }
         }
     };
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
