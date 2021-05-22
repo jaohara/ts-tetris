@@ -55,6 +55,7 @@ var Tetromino = /** @class */ (function () {
             //piece.lockDelay = null;
             piece.removeLockDelay();
             piece.well.lockPiece(piece);
+            game.playSound("lock");
         }
         else if (!game.isPaused()) {
             piece.lockPercentage += 100 / 30;
@@ -82,6 +83,7 @@ var Tetromino = /** @class */ (function () {
                 dropScore += 1; // move("down") adds one already, so add another to make it 2 per row
             } while (keepDroppin);
             if (!this.isGhost) {
+                game.playSound("drop");
                 this.game.addScore(dropScore);
             }
         }
@@ -149,6 +151,7 @@ var Tetromino = /** @class */ (function () {
                 this.removeLockDelay();
             }
             if (!this.isGhost) {
+                game.playSound("rotate");
                 this.ghost.setPos(this.pos);
                 this.ghost.hardDrop();
             }
@@ -206,6 +209,9 @@ var Tetromino = /** @class */ (function () {
                         this.removeLockDelay();
                     }
                 }
+                if (direction !== "gravity") {
+                    this.game.playSound("move");
+                }
                 this.ghost.setPos(this.pos);
                 this.ghost.hardDrop();
             }
@@ -215,12 +221,16 @@ var Tetromino = /** @class */ (function () {
             // it seems to be working without it? I should keep an eye on this
             //if (hardDrop || this.lockPercentage > 0){
             this.well.lockPiece(this);
+            game.playSound("lock");
         }
         else if (direction === "gravity" && !this.isGhost && this.lockPercentage == 0) {
             //game.log("Non valid move on a real piece due to gravity");
             if (this.lockPercentage == 0 && this.lockDelay == null) {
                 this.lockDelay = setInterval(function () { Tetromino.lockDelayTimer(_this); }, this.game.updateFrequency);
             }
+        }
+        else if (!this.isGhost) {
+            game.playSound("collide");
         }
         this.moveLock = false;
         this.nextMove();
@@ -614,12 +624,14 @@ var Tetris = /** @class */ (function () {
             "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " ", "f", "Escape", "p", "Tab",
             "e", "n", "Enter", "m"
         ];
-        this.debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown"];
+        this.debugControls = ["0", "9", "8", "7", "6", "5", "PageUp", "PageDown",
+            "-", "=", "+"];
         // game state
         this.activePiece = null;
         this.autorepeatFrameLock = 0;
         this.displayScoreTimer = null;
         this.gameOver = true;
+        this.gameOverMessage = "Game Over!";
         this.gameReport = null;
         this.gameType = null;
         this.gamepadConnected = false;
@@ -685,19 +697,20 @@ var Tetris = /** @class */ (function () {
         this.bezierColor2 = '#68e4b6';
         this.borderColor = '#bbb';
         this.currentFPS = 0;
+        this.fixedFont = 'JetBrains Mono';
+        this.gameFont = 'Fira Sans';
         this.highlightColor = { 'h': 21, 's': 84, 'l': 36 };
         this.highlightColorString = 'hsl(21, 84%, 36%)';
         this.highlightColorTarget = 21;
         this.pauseColor = '#000';
-        // private readonly gameFont       = 'Poppins';
-        // private readonly gameFont       = 'Righteous';
-        this.gameFont = 'Fira Sans';
+        this.titleFont = 'Monoton';
         this.fontColor = '#bbb';
         this.gridColor = '#9b9ba9';
         this.colorArray = [
             '#1b1d24', '#3498db', '#273ac5', '#e97e03',
             '#edcc30', '#13be3d', '#b84cd8', '#ec334d'
         ];
+        this.audioVolume = 1;
         // debug options
         this.debugLog = false;
         this.muteSound = false;
@@ -707,7 +720,7 @@ var Tetris = /** @class */ (function () {
         this.showFPS = false;
         this.simpleBackground = true;
         this.testRenderMinos = false;
-        this.gameVersion = "0.9.0";
+        this.gameVersion = "0.9.2";
         // setup canvas with proper scaling
         this.canvas = document.getElementById("main-canvas");
         var width = this.canvas.width;
@@ -779,22 +792,41 @@ var Tetris = /** @class */ (function () {
         // load sounds
         this.audioBack = new Audio('audio/misc_menu.wav');
         this.audioChange = new Audio('audio/misc_menu_2.wav');
+        this.audioCollide = new Audio('audio/pepSound1.mp3');
+        this.audioDrop = new Audio('audio/cardSlide1.mp3');
+        this.audioHold = new Audio('audio/cardSlide3.wav');
         this.audioLevelUp = new Audio('audio/MenuPack/MESSAGE-B_Accept.wav');
+        // todo: figure out how to differentiate between drop and lock - I think both trigger on drop
+        this.audioLock = new Audio('audio/cardSlide1.mp3');
+        this.audioMove = new Audio('audio/pepSound3.mp3');
         this.audioPause = new Audio('audio/sharp_echo.wav');
+        this.audioRotate = new Audio('audio/swish-1.wav');
         this.audioSelect = new Audio('audio/misc_menu_4.wav');
         this.audioStart = new Audio('audio/load.wav');
         this.audioBack.preload = 'auto';
         this.audioChange.preload = 'auto';
+        this.audioCollide.preload = 'auto';
+        this.audioDrop.preload = 'auto';
+        this.audioHold.preload = 'auto';
         this.audioLevelUp.preload = 'auto';
+        this.audioLock.preload = 'auto';
+        this.audioMove.preload = 'auto';
         this.audioPause.preload = 'auto';
+        this.audioRotate.preload = 'auto';
         this.audioSelect.preload = 'auto';
         this.audioStart.preload = 'auto';
         this.audioPrompts = {
             back: this.audioBack,
             change: this.audioChange,
             clear: this.audioStart,
+            collide: this.audioCollide,
+            drop: this.audioDrop,
+            hold: this.audioHold,
             levelup: this.audioLevelUp,
+            lock: this.audioLock,
+            move: this.audioMove,
             pause: this.audioPause,
+            rotate: this.audioRotate,
             select: this.audioSelect,
             start: this.audioStart
         };
@@ -825,6 +857,7 @@ var Tetris = /** @class */ (function () {
             // MAIN GAME LOOP
             this.gameLoop = setInterval(function () {
                 if (_this.checkWinConditions()) {
+                    _this.gameOverMessage = _this.gameType + " Clear!";
                     _this.endGame();
                 }
                 if (_this.titleScreen) {
@@ -929,6 +962,7 @@ var Tetris = /** @class */ (function () {
         this.gameLevel = gameLevel;
         game.gameModeSelectedOption = 0;
         this.gameOver = false;
+        this.gameOverMessage = "Game Over!";
         this.gameType = gameType;
         this.newHighScore = false;
         this.linesCleared = 0;
@@ -1194,6 +1228,10 @@ var Tetris = /** @class */ (function () {
                     game.addMessage("REMOVED 10 LINES");
                 }
             }
+            else if (input === "-" || input === "=" || input === "+") {
+                game.changeVolume(input !== "-");
+                game.addMessage("VOLUME " + Math.floor(game.audioVolume * 100) + "%");
+            }
         }
     };
     Tetris.pollGamepad = function () {
@@ -1258,6 +1296,7 @@ var Tetris = /** @class */ (function () {
     };
     Tetris.prototype.holdPiece = function () {
         if (!this.holdLock) {
+            this.playSound("hold");
             this.spawnLock = true;
             clearInterval(this.activePiece.gravity);
             this.activePiece.gravity = null;
@@ -1415,9 +1454,12 @@ var Tetris = /** @class */ (function () {
         this.toggleTextShadow();
         var cvh = this.cvHeights;
         var cvw = this.cvWidths;
+        this.ctx.font = 4.0 * window.devicePixelRatio + "em \"" + this.titleFont + "\"";
+        // todo: pretty text scenario - figure out how I want to handle this
+        if (this.gameOverMessage !== "Game Over!") {
+        }
         this.ctx.fillStyle = this.fontColor;
-        this.ctx.font = 4.0 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
-        this.ctx.fillText("Game Over", cvw.c2, cvh.c4);
+        this.ctx.fillText(this.gameOverMessage, cvw.c2, cvh.c4);
         // draw post-mortem
         if (this.gameReport !== null) {
             var gr = this.gameReport;
@@ -1597,7 +1639,7 @@ var Tetris = /** @class */ (function () {
         this.toggleTextShadow();
         this.ctx.fillStyle = this.fontColor;
         // this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
-        this.ctx.font = 10.0 * window.devicePixelRatio + "em \"Monoton\"";
+        this.ctx.font = 10.0 * window.devicePixelRatio + "em " + this.titleFont;
         this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
         this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
         this.ctx.globalAlpha = this.menuOpacity;
@@ -1691,13 +1733,14 @@ var Tetris = /** @class */ (function () {
             this.ctx.globalAlpha = 1;
             // render text
             this.ctx.fillStyle = this.borderColor;
-            this.ctx.font = 1.4 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
+            this.ctx.font = 1.2 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
             var lBoxTextX = ulBoxX + (ulBoxWidth / 2);
             var ulBoxTextY = ulBoxY + (rBoxHeight / 12);
             var blTextOffset = Math.floor(rBoxHeight / 24);
             var blBoxTextY = blBoxY + (blTextOffset * 2);
-            var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
+            var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(1, '0');
             var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
+            var mils = Math.floor(((this.elapsedTime / 1000 % 60) % 1) * 1000).toString().padStart(3, '0');
             // todo: add milliseconds for other game modes?
             // render twice, once with background
             // TODO: Remove double render code? Seems to give bad performance for minimal gain
@@ -1720,11 +1763,12 @@ var Tetris = /** @class */ (function () {
                 this.ctx.fillText("Level:", lBoxTextX, blBoxTextY + (blTextOffset * 7), blBoxWidth);
                 this.ctx.fillText("Time:", lBoxTextX, blBoxTextY + (blTextOffset * 11), blBoxWidth);
                 this.ctx.fillStyle = i == 1 ? this.borderColor : this.ctx.fillStyle;
-                // these .25s don't seem like the solution
+                this.ctx.font = 1.2 * window.devicePixelRatio + "em \"" + this.fixedFont + "\"";
+                // these .25s don't seem like the solution... or do they?
                 this.ctx.fillText("" + this.displayScore, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 1.25)), blBoxWidth);
                 this.ctx.fillText("" + this.linesCleared, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 4.25)), blBoxWidth);
                 this.ctx.fillText("" + this.gameLevel, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 8.25)), blBoxWidth);
-                this.ctx.fillText(mins + ":" + secs, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 12.25)), blBoxWidth);
+                this.ctx.fillText(mins + ":" + secs + "." + mils, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 12.25)), blBoxWidth);
                 // todo: this works for now but could be prettier
                 // draw score incrementing effect
                 if (this.displayScore < this.score) {
@@ -1739,6 +1783,7 @@ var Tetris = /** @class */ (function () {
                     this.ctx.shadowOffsetY = prevOffset;
                     this.ctx.shadowColor = prevColor;
                 }
+                this.ctx.font = 1.4 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
                 // draw high score
                 this.ctx.fillStyle = this.bgGradientColorString1;
                 this.ctx.fillText("High: " + this.highScore, cvw.c2 + 1, (cvh.c12 + cvh.c24) / 2 + 1);
@@ -1957,10 +2002,17 @@ var Tetris = /** @class */ (function () {
         if (!this.muteSound) {
             if (sound in this.audioPrompts) {
                 // this seems to be a magic number to kill delay?
+                this.audioPrompts[sound].volume = this.audioVolume;
                 this.audioPrompts[sound].currentTime = 0.07;
                 this.audioPrompts[sound].play();
             }
         }
+    };
+    Tetris.prototype.changeVolume = function (increase) {
+        var magnitude = increase ? .1 : -.1;
+        this.audioVolume += magnitude;
+        this.audioVolume = this.audioVolume > 1 ? 1 : this.audioVolume;
+        this.audioVolume = this.audioVolume < 0 ? 0 : this.audioVolume;
     };
     // GAMEPAD STUFF ONLY WRITTEN FOR CHROME AT THE MOMENT
     //  there's probably a better way to map these

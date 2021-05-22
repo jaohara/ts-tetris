@@ -33,13 +33,16 @@ Because JS and TS are super weird about how `this` works, some methods relating 
 
 ## Todo / Bugs:
 
-- Scoring/levelup messaging - have a "Line Clear!" type message scroll up the screen and stay visible for a few ms after a given event
-- Improve menus
 - Implement more robust high score logging
+  - different high score lists per gametype; different criteria (sprint should be time, not score)
+- Make gametype-dependent victory screens
+- Make non-gameover game clear screen more positive/animated
+  - Figure out pretty text idea for the "gameType Clear!" banner
+- Save configuration - volume level, background, etc
+- make options menu available
 - Implement non-Chrome gamepad support
 - Improve gamepad controls - should pieces be allowed to immediately harddrop after horizontal movement, or should that have a delay to
 - Random minor woes with intervals not properly clearing
 prevent that from happening accidentally?
 - Level up animation
-- Animate score increases? (increment score over period of time?)
 
