@@ -805,6 +805,7 @@ class Tetris {
     private gameLoop: ReturnType<typeof setTimeout>;
     private gameOver: boolean = true;
     private gameReport: GameOverInfo = null;
+    private gameType: string = null;
     private gamepadConnected: boolean = false;
     private gamepadIndex: number = null;
     private ghostPiece: Tetromino = null;
@@ -926,7 +927,7 @@ class Tetris {
     private simpleBackground: boolean = true;
     private testRenderMinos: boolean = false;
 
-    private readonly gameVersion = "0.8.9";
+    private readonly gameVersion = "0.9.0";
 
     constructor() {
         // setup canvas with proper scaling
@@ -1073,6 +1074,10 @@ class Tetris {
             // MAIN GAME LOOP
             this.gameLoop = setInterval(() => {
 
+                if (this.checkWinConditions()){
+                    this.endGame();
+                }
+
                 if (this.titleScreen){
                     // title screen state
                     this.drawTitle();
@@ -1191,6 +1196,7 @@ class Tetris {
         this.gameLevel = gameLevel;
         game.gameModeSelectedOption = 0;
         this.gameOver = false;
+        this.gameType = gameType;
         this.newHighScore = false;
         this.linesCleared = 0;
         this.overlayOpacity = 0;
@@ -1199,6 +1205,16 @@ class Tetris {
         this.titleScreenEnterPressed = false;
         game.titleScreenSelectedOption = 0;
         this.well.resetWell();
+
+        // todo: trigger some sort of countdown?
+        this.addMessage(gameType, true, true);
+    }
+
+    private checkWinConditions(): boolean {
+        // lol this is stupid
+         return (this.gameType === "Marathon" && this.linesCleared >= 150) ||
+             (this.gameType === "Sprint" && this.linesCleared >= 40) ||
+             (this.gameType === "Ultra" && this.elapsedTime/60000 >= 3);
     }
 
     endGame(quitToTitle: boolean = false, restart: boolean = false): void {
@@ -1239,9 +1255,7 @@ class Tetris {
 
             if (restart) {
                 // so is this how I'm restarting the game?
-                this.newGame();
-
-
+                this.newGame(this.gameType);
             }
 
             if (this.paused) {
@@ -1416,7 +1430,8 @@ class Tetris {
 
                     game.lastFrameAction = game.lastFrameAction === input ? null : input;
                 }
-                else if (game.gameOver && input === "Enter") {
+                else if (game.gameOver && input === "Enter" || input === " ") {
+                    game.playSound("select");
                     if (game.gameOverSelectedOption === 0) {
                         //retry
                         game.restartGame();
@@ -2085,6 +2100,7 @@ class Tetris {
             let blBoxTextY   = blBoxY + (blTextOffset * 2);
             let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(2, '0');
             let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
+            // todo: add milliseconds for other game modes?
 
 
             // render twice, once with background

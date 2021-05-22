@@ -621,6 +621,7 @@ var Tetris = /** @class */ (function () {
         this.displayScoreTimer = null;
         this.gameOver = true;
         this.gameReport = null;
+        this.gameType = null;
         this.gamepadConnected = false;
         this.gamepadIndex = null;
         this.ghostPiece = null;
@@ -706,7 +707,7 @@ var Tetris = /** @class */ (function () {
         this.showFPS = false;
         this.simpleBackground = true;
         this.testRenderMinos = false;
-        this.gameVersion = "0.8.9";
+        this.gameVersion = "0.9.0";
         // setup canvas with proper scaling
         this.canvas = document.getElementById("main-canvas");
         var width = this.canvas.width;
@@ -823,6 +824,9 @@ var Tetris = /** @class */ (function () {
             }, 1);
             // MAIN GAME LOOP
             this.gameLoop = setInterval(function () {
+                if (_this.checkWinConditions()) {
+                    _this.endGame();
+                }
                 if (_this.titleScreen) {
                     // title screen state
                     _this.drawTitle();
@@ -925,6 +929,7 @@ var Tetris = /** @class */ (function () {
         this.gameLevel = gameLevel;
         game.gameModeSelectedOption = 0;
         this.gameOver = false;
+        this.gameType = gameType;
         this.newHighScore = false;
         this.linesCleared = 0;
         this.overlayOpacity = 0;
@@ -933,6 +938,14 @@ var Tetris = /** @class */ (function () {
         this.titleScreenEnterPressed = false;
         game.titleScreenSelectedOption = 0;
         this.well.resetWell();
+        // todo: trigger some sort of countdown?
+        this.addMessage(gameType, true, true);
+    };
+    Tetris.prototype.checkWinConditions = function () {
+        // lol this is stupid
+        return (this.gameType === "Marathon" && this.linesCleared >= 150) ||
+            (this.gameType === "Sprint" && this.linesCleared >= 40) ||
+            (this.gameType === "Ultra" && this.elapsedTime / 60000 >= 3);
     };
     Tetris.prototype.endGame = function (quitToTitle, restart) {
         if (quitToTitle === void 0) { quitToTitle = false; }
@@ -969,7 +982,7 @@ var Tetris = /** @class */ (function () {
             this.well.resetWell();
             if (restart) {
                 // so is this how I'm restarting the game?
-                this.newGame();
+                this.newGame(this.gameType);
             }
             if (this.paused) {
                 this.pause();
@@ -1131,7 +1144,8 @@ var Tetris = /** @class */ (function () {
                     }
                     game.lastFrameAction = game.lastFrameAction === input ? null : input;
                 }
-                else if (game.gameOver && input === "Enter") {
+                else if (game.gameOver && input === "Enter" || input === " ") {
+                    game.playSound("select");
                     if (game.gameOverSelectedOption === 0) {
                         //retry
                         game.restartGame();
@@ -1684,6 +1698,7 @@ var Tetris = /** @class */ (function () {
             var blBoxTextY = blBoxY + (blTextOffset * 2);
             var mins = Math.floor((this.elapsedTime / 1000) / 60).toString().padStart(2, '0');
             var secs = Math.floor((this.elapsedTime / 1000) % 60).toString().padStart(2, '0');
+            // todo: add milliseconds for other game modes?
             // render twice, once with background
             // TODO: Remove double render code? Seems to give bad performance for minimal gain
             for (var i = 1; i < 2; i++) {
