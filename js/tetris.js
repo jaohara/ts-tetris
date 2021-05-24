@@ -1638,7 +1638,7 @@ var Tetris = /** @class */ (function () {
                     if (gridPasses === 1 && this.gameOverLockCounter === 0 &&
                         piecePos !== null && piecePos.includes(row + ":" + col) ||
                         ghostPos !== null && ghostPos.includes(row + ":" + col)) {
-                        if (piecePos.includes(row + ":" + col)) {
+                        if (this.activePiece !== null && piecePos.includes(row + ":" + col)) {
                             if (this.configOptions.pieceGlow) {
                                 this.ctx.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
                                 this.ctx.filter = 'blur(5px)';
@@ -1651,7 +1651,7 @@ var Tetris = /** @class */ (function () {
                             pieceLocking = piecePos.includes(row + ":" + col) ? this.activePiece.getLockPercentage() > 0 : false;
                             mino = this.renderedMinos[this.activePiece.pieceType];
                         }
-                        else if (ghostPos.includes(row + ":" + col)) {
+                        else if (this.ghostPiece !== null && ghostPos.includes(row + ":" + col)) {
                             this.ctx.fillStyle = this.colorArray[0];
                             this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                             colorOpacity = this.ghostPieceOpacity / 255;
