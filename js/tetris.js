@@ -26,16 +26,17 @@ var Tetromino = /** @class */ (function () {
             this.isGhost = isGhost;
             this.lockPercentage = 0;
             this.moveLock = false;
-            this.moveQueue = new MoveQueue();
             this.pieceType = pieceType;
             this.pos = isGhost ? pos : Tetromino.startPositions[pieceType];
             this.well = well;
-            var validSpawn = true;
-            for (var _i = 0, _a = this.pos; _i < _a.length; _i++) {
-                var position = _a[_i];
-                validSpawn = this.checkValidMove(position.split(":").map(function (x) { return parseInt(x); }));
+            //let validSpawn = true;
+            /*
+            for (let position of this.pos){
+                validSpawn = this.checkValidMove(position.split(":").map(x => parseInt(x)));
             }
-            if (!validSpawn) {
+
+             */
+            if (!this.checkValidSpawn()) {
                 this.game.endGame();
             }
             if (!isGhost) {
@@ -166,7 +167,6 @@ var Tetromino = /** @class */ (function () {
             }
         }
         this.moveLock = false;
-        this.nextMove();
         return validMove;
     };
     Tetromino.prototype.move = function (direction) {
@@ -219,7 +219,6 @@ var Tetromino = /** @class */ (function () {
         else if (direction === "down" && !this.isGhost) {
             // I was also checking '|| direction === "gravity"', but that was causing a bug, and
             // it seems to be working without it? I should keep an eye on this
-            //if (hardDrop || this.lockPercentage > 0){
             this.well.lockPiece(this);
             game.playSound("lock");
         }
@@ -233,7 +232,6 @@ var Tetromino = /** @class */ (function () {
             game.playSound("collide");
         }
         this.moveLock = false;
-        this.nextMove();
         return validMove;
     };
     Tetromino.prototype.getPos = function () {
@@ -245,23 +243,21 @@ var Tetromino = /** @class */ (function () {
             this.pos = pos;
         }
     };
-    Tetromino.prototype.nextMove = function () {
-        if (this.moveQueue.size() > 0) {
-            var nextMove = this.moveQueue.dequeue().split(":");
-            game.log("Dequeued move: " + nextMove.join(":"));
-            if (nextMove[0] == "move") {
-                this.move(nextMove[1]);
-            }
-            else if (nextMove[0] == "rotate") {
-                this.rotate(nextMove[1]);
-            }
-        }
-    };
     Tetromino.prototype.checkValidMove = function (position) {
         // first one changed from 0, I think this will allow the rotation over the top...
         return !(position[0] < -3 || position[0] >= this.well.getHeight() ||
             position[1] < 0 || position[1] >= this.well.getWidth() ||
             position[0] > 0 && this.well.getGrid()[position[0]][position[1]] != 0);
+    };
+    Tetromino.prototype.checkValidSpawn = function () {
+        for (var _i = 0, _a = this.pos; _i < _a.length; _i++) {
+            var position = _a[_i];
+            var positionComps = position.split(":").map(function (x) { return parseInt(x); });
+            if (this.well.getGrid()[positionComps[0]][positionComps[1]] !== 0) {
+                return false;
+            }
+        }
+        return true;
     };
     Tetromino.prototype.toString = function () {
         return "[Tetromino: " + this.pieceType + (this.isGhost ? " - GHOST" : "") + "]";
@@ -326,31 +322,6 @@ var Tetromino = /** @class */ (function () {
     return Tetromino;
 }());
 /**
- * MoveQueue - a simple queue implementation that Tetromino uses to store moves that
- * are requested while it is already performing a move.
- *
- * I don't really know if this is needed, at all. Originally I thought this was a
- * solution to the rotation bug - not only was it not that, but the methods never
- * even get called, implying that there's never a situation where multiple moves are
- * happening at the same time, meaning that this class doesn't really serve a purpose.
- */
-var MoveQueue = /** @class */ (function () {
-    function MoveQueue() {
-        this.queue = [];
-    }
-    MoveQueue.prototype.enqueue = function (move) {
-        this.queue.push(move);
-    };
-    // I kinda don't like allowing it to return undefined, but I guess it makes sense
-    MoveQueue.prototype.dequeue = function () {
-        return this.queue.shift();
-    };
-    MoveQueue.prototype.size = function () {
-        return this.queue.length;
-    };
-    return MoveQueue;
-}());
-/**
  * Well - A class used to represent the current game board.
  *
  * The "grid" is the state of the board, stored as a 2D array of arrays that store numbers.
@@ -366,6 +337,7 @@ var Well = /** @class */ (function () {
         this.grid = [];
         this.height = 20;
         this.width = 10;
+        this.backToBackTetris = false;
         this.clearAlpha = 0;
         this.clearAnimationInterval = null;
         this.clearAnimationCompleting = false;
@@ -454,15 +426,17 @@ var Well = /** @class */ (function () {
                             var lineScore = (200 * _this.rowsClearing.length);
                             lineScore -= _this.rowsClearing.length < 4 ? 100 : 0;
                             lineScore *= _this.game.getLevel();
+                            lineScore *= _this.rowsClearing.length === 4 && _this.backToBackTetris ? 1.5 : 1;
                             var scoreMessage = void 0;
                             // todo: This can be more terse, right?
                             if (_this.rowsClearing.length < 4 && _this.rowsClearing.length > 0) {
                                 scoreMessage = "LINE CLEAR x" + _this.rowsClearing.length;
                             }
                             else {
-                                scoreMessage = "TETRIS! ";
+                                scoreMessage = (_this.backToBackTetris ? "BACK TO BACK " : "") + "TETRIS! ";
                             }
                             scoreMessage += " +" + lineScore;
+                            _this.backToBackTetris = _this.rowsClearing.length === 4;
                             _this.game.addMessage(scoreMessage, _this.rowsClearing.length === 4);
                             game.log("linesCleared: " + _this.rowsClearing.length + " - lineScore: " + lineScore);
                             // reset the row clear animation
@@ -591,7 +565,7 @@ var Tetris = /** @class */ (function () {
     function Tetris() {
         this.gamepad = null;
         this.gamepadLastFrame = null;
-        // Object to store commonly needed pixel locations and dimensions
+        // Objects to store commonly needed pixel locations and dimensions
         this.cvLocations = [1, 2, 3, 4, 6, 8, 12, 24];
         this.renderedBGTimer = null;
         this.renderedMinos = {
@@ -696,6 +670,8 @@ var Tetris = /** @class */ (function () {
         this.titleScreenOptions = ["Start", "High Scores", "Options"];
         this.titleScreenSelectedOption = 0;
         // transition stuff
+        this.gameOverLockCounter = 0;
+        this.gameOverLockTimer = null;
         this.loadOverlayOpacityTimer = null;
         this.loadOverlayLock = false; // todo: does this actually do anything?
         this.loadOverlayOpacity = 0;
@@ -753,7 +729,7 @@ var Tetris = /** @class */ (function () {
             testRenderMinos: false
         };
         this.configOptions = this.configOptionsDefault;
-        this.gameVersion = "0.9.4";
+        this.gameVersion = "0.9.5";
         // setup canvas with proper scaling
         this.canvas = document.getElementById("main-canvas");
         var width = this.canvas.width;
@@ -820,14 +796,7 @@ var Tetris = /** @class */ (function () {
         var configOptions = localStorage.getItem("configOptions");
         this.configOptions =
             configOptions !== null ? JSON.parse(configOptions) : this.configOptionsDefault;
-        /*
-        if (configOptions !== null) {
-            this.configOptions = JSON.parse(configOptions);
-        }
-        */
         // setup high scores
-        var localHighScore = localStorage.getItem("highScore");
-        this.highScore = localHighScore !== null ? parseInt(localHighScore) : 16000;
         var localHighScores = localStorage.getItem("highScores");
         this.highScores =
             localHighScores !== null ? JSON.parse(localHighScores) : this.highScoresDefault;
@@ -885,7 +854,6 @@ var Tetris = /** @class */ (function () {
             document.addEventListener("keyup", Tetris.clearLastFrameAction);
             window.addEventListener("gamepadconnected", function (e) { return Tetris.setupGamepad(e, true); });
             window.addEventListener("gamepaddisconnected", function (e) { return Tetris.setupGamepad(e, false); });
-            //this.newGame();
             // set score increment interval
             this.displayScoreTimer = setInterval(function () {
                 // should this be faster?
@@ -904,22 +872,18 @@ var Tetris = /** @class */ (function () {
                     _this.gameOverMessage = _this.gameType + " Clear!";
                     _this.endGame();
                 }
-                if (_this.titleScreen) {
-                    // title screen state
+                if (_this.titleScreen) { // title screen state
                     _this.drawTitle();
                 }
-                else if (_this.gameOver) {
-                    // game over state
-                    //this.updateHighScore(true);
+                else if (_this.gameOver) { // game over state
                     _this.drawGameOver();
                 }
-                else {
-                    // in-game state
+                else { // in-game state
                     // update framerate count
                     var currentFrametime = Date.now() - _this.previousLoopTime;
                     _this.currentFPS = (1000 / currentFrametime);
                     // update loop timer
-                    if (!_this.paused) {
+                    if (!_this.paused && _this.gameOverLockCounter === 0) {
                         _this.previousLoopTime = isNaN(_this.previousLoopTime) ? Date.now() : _this.previousLoopTime;
                         _this.elapsedTime += currentFrametime;
                     }
@@ -932,7 +896,8 @@ var Tetris = /** @class */ (function () {
                     if (_this.activePiece !== null && _this.activePiece.getLockPercentage() > 0) {
                         game.log("activePiece locking: " + _this.activePiece.getLockPercentage() + "%");
                     }
-                    if (!_this.titleScreen && !_this.paused && !_this.gameOver) {
+                    if (!_this.titleScreen && !_this.paused && !_this.gameOver
+                        && _this.gameOverLockCounter === 0) {
                         // check for levelup
                         if (Math.floor(_this.linesCleared / 10) + 1 > _this.gameLevel && _this.gameLevel < 15) {
                             game.playSound("levelup");
@@ -973,17 +938,13 @@ var Tetris = /** @class */ (function () {
                                 if (!_this.paused && !_this.configOptions.noGravity) {
                                     if (!_this.activePiece.moveLock) {
                                         var falling = _this.activePiece.move("gravity");
-                                        if (!falling) {
-                                            //this.well.lockPiece(this.activePiece);
-                                        }
                                     }
                                     else {
-                                        _this.activePiece.moveQueue.enqueue("move:gravity");
+                                        //this.activePiece.moveQueue.enqueue(`move:gravity`);
                                     }
                                 }
                             }, (_this.updateFrequency / _this.gameSpeed[_this.gameLevel]));
                         }
-                        //this.updateHighScore();
                     }
                 }
                 // render board
@@ -996,9 +957,9 @@ var Tetris = /** @class */ (function () {
     };
     // what's up with this vs the state reset in endGame? should I keep part of this?
     Tetris.prototype.newGame = function (gameType, gameLevel) {
-        // super debug, remove
         if (gameType === void 0) { gameType = "Endless"; }
         if (gameLevel === void 0) { gameLevel = 1; }
+        // super debug, remove
         if (!this.gameModeOptions.includes(gameType)) {
             throw new Error("Game Mode not valid!");
         }
@@ -1029,13 +990,85 @@ var Tetris = /** @class */ (function () {
             (this.gameType === "Ultra" && this.elapsedTime / 60000 >= 3);
     };
     Tetris.prototype.endGame = function (quitToTitle, restart) {
+        var _this = this;
         if (quitToTitle === void 0) { quitToTitle = false; }
         if (restart === void 0) { restart = false; }
         if (this.running) {
+            // reset game pieces
+            if (this.activePiece !== null) {
+                clearInterval(this.activePiece.gravity);
+                this.activePiece.gravity = null;
+                this.activePiece = null;
+            }
+            if (this.gameOverLockTimer === null) {
+                this.gameOverLockTimer = setInterval(function () {
+                    if (_this.gameOverLockCounter < _this.well.getHeight() * _this.well.getWidth()
+                        && !quitToTitle && !restart) {
+                        _this.gameOverLockCounter++;
+                    }
+                    else { // do I use fade to black for this?
+                        // clear this interval
+                        clearInterval(_this.gameOverLockTimer);
+                        _this.gameOverLockTimer = null;
+                        _this.gameOverLockCounter = 0;
+                        // set proper state
+                        _this.gameOver = true;
+                        _this.titleScreen = quitToTitle;
+                        if (_this.gameType === "Sprint" && _this.linesCleared >= 40) {
+                            _this.currentHighScores.push(_this.elapsedTime);
+                            _this.currentHighScores.sort(function (a, b) { return a - b; });
+                        }
+                        _this.updateHighScore(true);
+                        // set game over info
+                        _this.gameReport = {
+                            gameType: _this.gameType,
+                            highScore: _this.newHighScore,
+                            level: _this.gameLevel,
+                            linesCleared: _this.linesCleared,
+                            score: _this.score,
+                            time: Tetris.timeCompFromMillis(_this.elapsedTime)
+                        };
+                        /*
+                        // reset game pieces
+                        if (this.activePiece !== null) {
+                            clearInterval(this.activePiece.gravity);
+                            this.activePiece.gravity = null;
+                            this.activePiece = null;
+                        }
+
+                         */
+                        _this.elapsedTime = 0;
+                        _this.finalScore = _this.score;
+                        _this.linesCleared = 0;
+                        _this.gameLevel = 0;
+                        _this.ghostPiece = null;
+                        _this.heldPiece = null;
+                        _this.pieceBag = [];
+                        _this.pieceBagBackup = [];
+                        _this.score = 0;
+                        _this.well.resetWell();
+                        if (restart) {
+                            // so is this how I'm restarting the game?
+                            _this.newGame(_this.gameType);
+                        }
+                        if (_this.paused) {
+                            _this.pause();
+                        }
+                    }
+                }, this.updateFrequency);
+            }
+            /*
             // set proper state
             this.gameOver = true;
             this.titleScreen = quitToTitle;
+
+            if (this.gameType === "Sprint" && this.linesCleared >= 40) {
+                this.currentHighScores.push(this.elapsedTime);
+                this.currentHighScores.sort((a, b) => a-b);
+            }
+
             this.updateHighScore(true);
+
             // set game over info
             this.gameReport = {
                 gameType: this.gameType,
@@ -1043,14 +1076,16 @@ var Tetris = /** @class */ (function () {
                 level: this.gameLevel,
                 linesCleared: this.linesCleared,
                 score: this.score,
-                time: Tetris.timeCompFromMillis(this.elapsedTime)
-            };
+                time: Tetris.timeCompFromMillis(this.elapsedTime),
+            }
+
             // reset game pieces
             if (this.activePiece !== null) {
                 clearInterval(this.activePiece.gravity);
                 this.activePiece.gravity = null;
                 this.activePiece = null;
             }
+
             this.elapsedTime = 0;
             this.finalScore = this.score;
             this.linesCleared = 0;
@@ -1061,19 +1096,20 @@ var Tetris = /** @class */ (function () {
             this.pieceBagBackup = [];
             this.score = 0;
             this.well.resetWell();
+
             if (restart) {
                 // so is this how I'm restarting the game?
                 this.newGame(this.gameType);
             }
+
             if (this.paused) {
                 this.pause();
-            }
+            }*/
         }
         else {
             game.log("Game isn't running.");
         }
     };
-    // todo: have a pause menu controllable by arrow keys
     Tetris.prototype.pause = function (skipFade) {
         var _this = this;
         if (skipFade === void 0) { skipFade = false; }
@@ -1102,7 +1138,6 @@ var Tetris = /** @class */ (function () {
         return this.paused;
     };
     Tetris.pollInput = function (event, input, gamepadSource) {
-        //game.log(`event: ${event}, input: ${input}`);
         if (event === void 0) { event = null; }
         if (input === void 0) { input = null; }
         if (gamepadSource === void 0) { gamepadSource = false; }
@@ -1130,7 +1165,7 @@ var Tetris = /** @class */ (function () {
                 else if (game.activePiece !== null && !game.paused) {
                     if (["left", "right", "down"].includes(input)) {
                         if (game.activePiece.moveLock) {
-                            game.activePiece.moveQueue.enqueue("move:" + input);
+                            //game.activePiece.moveQueue.enqueue(`move:${input}`);
                         }
                         else {
                             game.activePiece.move(input);
@@ -1138,12 +1173,7 @@ var Tetris = /** @class */ (function () {
                     }
                     else if (input === "up" || input === "e") {
                         var direction = input == "up" ? "right" : "left";
-                        if (game.activePiece.moveLock) {
-                            game.activePiece.moveQueue.enqueue("rotate:" + direction);
-                        }
-                        else {
-                            game.activePiece.rotate(direction);
-                        }
+                        game.activePiece.rotate(direction);
                     }
                     else if (input === " ") {
                         game.activePiece.hardDrop();
@@ -1352,7 +1382,6 @@ var Tetris = /** @class */ (function () {
             clearInterval(this.activePiece.gravity);
             this.activePiece.gravity = null;
             game.log("Holding " + this.activePiece + ", swapping for " + this.heldPiece);
-            // did reordering these steps change the lockdelay bug?
             this.activePiece.removeLockDelay();
             var tempPiece = this.activePiece;
             this.activePiece = this.heldPiece !== null ?
@@ -1385,10 +1414,6 @@ var Tetris = /** @class */ (function () {
         this.bgGradientTarget1 -= this.bgGradientTarget1 > 360 ? 360 : 0;
         this.bgGradientTarget2 -= this.bgGradientTarget2 > 360 ? 360 : 0;
         this.highlightColorTarget -= this.highlightColorTarget > 360 ? 360 : 0;
-        /*
-        this.highlightColorTarget -= this.highlightColorTarget > 360 ?
-            this.highlightColorTarget - 360 : this.highlightColorTarget;
-         */
         // shift bg gradient pattern with additional cleared lines
         if (this.bgGradientTimer === null) {
             this.bgGradientTimer = setInterval(function () {
@@ -1414,24 +1439,25 @@ var Tetris = /** @class */ (function () {
         }
     };
     Tetris.prototype.addScore = function (score) {
-        var currentIndex = this.currentHighScores.indexOf(this.score);
-        if (currentIndex > -1) {
-            this.currentHighScores.splice(currentIndex, 1);
-        }
-        this.score += score;
-        this.currentHighScores.push(this.score);
-        this.currentHighScores.sort(function (a, b) { return a - b; });
         if (this.gameType !== "Sprint") {
+            var currentIndex = this.currentHighScores.indexOf(this.score);
+            if (currentIndex > -1) {
+                this.currentHighScores.splice(currentIndex, 1);
+            }
+            this.score += score;
+            this.currentHighScores.push(this.score);
+            this.currentHighScores.sort(function (a, b) { return a - b; });
             this.currentHighScores.reverse();
+            var newIndex = this.currentHighScores.indexOf(this.score);
+            if (currentIndex !== newIndex && newIndex !== this.currentHighScores.length - 1) {
+                this.addMessage("New High Score Rank! #" + (newIndex + 1) + "!", true, true);
+                this.playSound("levelup");
+            }
         }
-        // todo: this doesn't work as I want it to
-        if (currentIndex > 0 && currentIndex < this.currentHighScores.length - 1
-            && this.currentHighScores.indexOf(this.score) < currentIndex) {
-            this.addMessage("New High Score!", true, true);
-            this.playSound("levelup");
+        else {
+            // these mean nothing, but it's nice to have feedback
+            this.score += score;
         }
-        //this.newHighScore = this.score > this.highScore ? true : this.newHighScore;
-        //this.highScore = this.newHighScore ? this.score : this.highScore;
     };
     Tetris.prototype.addMessage = function (message, prettyBorder, important) {
         if (prettyBorder === void 0) { prettyBorder = false; }
@@ -1443,13 +1469,11 @@ var Tetris = /** @class */ (function () {
     };
     Tetris.prototype.updateHighScore = function (writeScore) {
         if (writeScore === void 0) { writeScore = false; }
-        //this.highScore = this.score > this.highScore ? this.score : this.highScore;
         var topFive = this.currentHighScores.slice(0, 5);
         for (var i = 0; i < 5; i++) {
             this.highScores[this.gameType][i + 1] = topFive[i];
         }
         if (writeScore) {
-            localStorage.setItem("highScore", this.highScore.toString());
             localStorage.setItem("highScores", JSON.stringify(this.highScores));
         }
     };
@@ -1543,13 +1567,6 @@ var Tetris = /** @class */ (function () {
             }
             var linesPerMinute = (gr.linesCleared / (gr.time.raw / 1000 / 60)).toFixed(2);
             var pointsPerMinute = (gr.score / (gr.time.raw / 1000 / 60)).toFixed(2);
-            // todo: remove
-            /*
-            let mins = Math.floor((gr.time/1000)/60).toString().padStart(2, '0');
-            let secs = Math.floor((gr.time/1000)%60).toString().padStart(2, '0');
-            let mils = Math.floor(((gr.time/1000%60)%1)*1000).toString().padStart(3, '0');
-
-             */
             this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
             this.ctx.fillText("Score: " + gr.score, cvw.c3, cvh.c2 - cvh.c12);
             this.ctx.fillText("Time: " + gr.time.mins + ":" + gr.time.secs + "." + gr.time.mils, cvw.c3, cvh.c2 - cvh.c24);
@@ -1607,8 +1624,9 @@ var Tetris = /** @class */ (function () {
         // get positions of active piece and that freaky ghost piece
         var piecePos = this.activePiece === null ? null : this.activePiece.getPos();
         var ghostPos = this.ghostPiece === null ? null : this.ghostPiece.getPos();
+        var maxGridPasses = this.gameOverLockCounter === 0 ? 2 : 3;
         // fill the blocks, rendering the active piece/that creepy ghost piece
-        for (var gridPasses = 0; gridPasses < 2; gridPasses++) {
+        for (var gridPasses = 0; gridPasses < maxGridPasses; gridPasses++) {
             for (var row = 0; row < gridHeight; row++) {
                 for (var col = 0; col < gridWidth; col++) {
                     var blockX = gridX + this.gridSize + (col * (this.blockSize + this.gridSize));
@@ -1617,14 +1635,13 @@ var Tetris = /** @class */ (function () {
                     var mino = null;
                     var pieceLocking = false;
                     // only draw pieces on second pass
-                    if (gridPasses > 0 &&
+                    if (gridPasses === 1 && this.gameOverLockCounter === 0 &&
                         piecePos !== null && piecePos.includes(row + ":" + col) ||
                         ghostPos !== null && ghostPos.includes(row + ":" + col)) {
                         if (piecePos.includes(row + ":" + col)) {
                             if (this.configOptions.pieceGlow) {
                                 this.ctx.fillStyle = this.colorArray[Tetris.getPieceColorIndex(this.activePiece)];
                                 this.ctx.filter = 'blur(5px)';
-                                //this.ctx.globalCompositeOperation = "lighten";
                                 this.ctx.globalAlpha = 1;
                                 this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                                 this.ctx.filter = 'none';
@@ -1655,16 +1672,23 @@ var Tetris = /** @class */ (function () {
                         this.ctx.drawImage(mino, blockX, blockY);
                     }
                     else if (gridPasses === 0) {
-                        // I suppose I don't grab the colors anymore - grid value could now be state rather than color?
                         this.ctx.fillStyle = this.colorArray[0];
                         this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                     }
+                    // fill game over grid
+                    if (gridPasses === 2) {
+                        var cell = col + 1 + (row * gridWidth);
+                        if (cell <= this.gameOverLockCounter) {
+                            mino = this.renderedMinos[Tetromino.pieceTypes[cell % 7]];
+                            this.ctx.drawImage(mino, blockX, blockY);
+                        }
+                    }
                     this.ctx.globalAlpha = 1;
                     // piece lock animation
-                    if (pieceLocking || this.well.getRowsClearing().includes(row)) {
+                    if (this.gameOverLockCounter === 0 &&
+                        pieceLocking || this.well.getRowsClearing().includes(row)) {
                         var overlayOpacity = pieceLocking ? this.activePiece.getLockPercentage() / 100
                             : this.well.getClearAlpha();
-                        // this.ctx.fillStyle = `rgba(255,255,255,${this.activePiece.getLockPercentage() / 100})`;
                         this.ctx.fillStyle = "rgba(255,255,255," + overlayOpacity + ")";
                         this.ctx.fillRect(blockX, blockY, this.blockSize, this.blockSize);
                     }
@@ -1732,7 +1756,6 @@ var Tetris = /** @class */ (function () {
         var cvh = this.cvHeights;
         this.toggleTextShadow();
         this.ctx.fillStyle = this.fontColor;
-        // this.ctx.font = `${10.0 * window.devicePixelRatio}em "${this.gameFont}"`;
         this.ctx.font = 10.0 * window.devicePixelRatio + "em " + this.titleFont;
         this.ctx.fillText("TETRIS", cvw.c2, cvh.c3);
         this.ctx.font = window.devicePixelRatio + "em \"" + this.gameFont + "\"";
@@ -1753,7 +1776,7 @@ var Tetris = /** @class */ (function () {
                 var option = currentMenu[optionIndex];
                 this.ctx.globalAlpha = this.menuOpacity < 0 ? 0 : this.menuOpacity;
                 // todo: REMOVE WHEN OPTION MENU IS CODED
-                if (this.currentMenu === "Title" && option === "Options") {
+                if (this.currentMenu === "Title" && option === "Options" || option === "High Scores") {
                     this.ctx.globalAlpha *= .4;
                 }
                 this.ctx.fillText(option, cvw.c2, cvh.c2 + cvh.c12 * optionIndex);
@@ -1762,7 +1785,6 @@ var Tetris = /** @class */ (function () {
                     this.ctx.fillText(this.gameModeDescriptions[option], cvw.c2, cvh.c2 + cvh.c12 * optionIndex + cvh.c24 * .75);
                     this.ctx.font = 1.4 * window.devicePixelRatio + "em " + this.gameFont;
                 }
-                // if (optionIndex === this.titleScreenSelectedOption) {
                 if (optionIndex === currentSelectedOption) {
                     this.toggleTextShadow();
                     this.ctx.fillStyle = this.highlightColorString;
@@ -1832,14 +1854,7 @@ var Tetris = /** @class */ (function () {
             var ulBoxTextY = ulBoxY + (rBoxHeight / 12);
             var blTextOffset = Math.floor(rBoxHeight / 24);
             var blBoxTextY = blBoxY + (blTextOffset * 2);
-            /*
-            let mins = Math.floor((this.elapsedTime/1000)/60).toString().padStart(1, '0');
-            let secs = Math.floor((this.elapsedTime/1000)%60).toString().padStart(2, '0');
-            let mils = Math.floor(((this.elapsedTime/1000%60)%1)*1000).toString().padStart(3, '0');
-
-             */
             var time = Tetris.timeCompFromMillis(this.elapsedTime);
-            // todo: add milliseconds for other game modes?
             // render twice, once with background
             // TODO: Remove double render code? Seems to give bad performance for minimal gain
             for (var i = 1; i < 2; i++) {
@@ -1868,8 +1883,6 @@ var Tetris = /** @class */ (function () {
                 this.ctx.fillText("" + this.gameLevel, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 8.25)), blBoxWidth);
                 // this.ctx.fillText(`${mins}:${secs}.${mils}`, lBoxTextX,
                 this.ctx.fillText(time.mins + ":" + time.secs + "." + time.mils, lBoxTextX, blBoxTextY + Math.floor((blTextOffset * 12.25)), blBoxWidth);
-                // todo: this works for now but could be prettier
-                // draw score incrementing effect
                 if (this.displayScore < this.score) {
                     var prevBlur = this.ctx.shadowBlur;
                     var prevOffset = this.ctx.shadowOffsetY;
@@ -1884,18 +1897,22 @@ var Tetris = /** @class */ (function () {
                 }
                 this.ctx.font = 1.4 * window.devicePixelRatio + "em \"" + this.gameFont + "\"";
                 // draw high score
-                // TODO: Completely rethink how the spring scoring works. It thinks the score is the time.
-                var scoreIndex = this.currentHighScores.indexOf(this.score) - 1 < 0 ? 0 :
-                    this.currentHighScores.indexOf(this.score) - 1;
+                // TODO: Completely rethink how the sprint scoring works. It thinks the score is the time.
+                var scoreIndex = void 0;
+                if (this.currentHighScores.includes(this.score)) {
+                    scoreIndex = this.currentHighScores.indexOf(this.score) - 1 < 0 ? 0 :
+                        this.currentHighScores.indexOf(this.score) - 1;
+                }
+                else {
+                    scoreIndex = this.currentHighScores.length - 1;
+                }
+                var scoreString = this.gameType === "Sprint" ?
+                    "Best: " + Tetris.timeStringFromMillis(this.currentHighScores[0]) :
+                    "#" + (scoreIndex + 1) + " - " + this.currentHighScores[scoreIndex];
                 this.ctx.fillStyle = this.bgGradientColorString1;
-                // this.ctx.fillText(`High: ${this.highScore}`, cvw.c2 + 1, (cvh.c12 + cvh.c24)/2 + 1);
-                this.ctx.fillText(scoreIndex + 1 + " - " + (this.gameType === "Sprint" ?
-                    Tetris.timeStringFromMillis(this.currentHighScores[scoreIndex])
-                    : this.currentHighScores[scoreIndex]), cvw.c2 + 1, (cvh.c12 + cvh.c24) / 2 + 1);
+                this.ctx.fillText(scoreString, cvw.c2 + 1, (cvh.c12 + cvh.c24) / 2 + 1);
                 this.ctx.fillStyle = this.borderColor;
-                this.ctx.fillText(scoreIndex + 1 + " - " + (this.gameType === "Sprint" ?
-                    Tetris.timeStringFromMillis(this.currentHighScores[scoreIndex])
-                    : this.currentHighScores[scoreIndex]), cvw.c2, (cvh.c12 + cvh.c24) / 2);
+                this.ctx.fillText(scoreString, cvw.c2, (cvh.c12 + cvh.c24) / 2);
             }
             // render held piece
             if (this.heldPiece !== null) {
@@ -1941,7 +1958,6 @@ var Tetris = /** @class */ (function () {
         }
     };
     Tetris.prototype.toggleTextShadow = function () {
-        // this.ctx.shadowColor = this.bgGradientColorString1;
         this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
         this.ctx.shadowBlur = this.ctx.shadowBlur === 5 ? 0 : 5;
         this.ctx.shadowOffsetY = this.ctx.shadowOffsetY === 2 ? 0 : 2;
@@ -2037,8 +2053,6 @@ var Tetris = /** @class */ (function () {
         this.fadeToBlackTransition(function () { return _this.newGame(gameType); });
     };
     Tetris.prototype.restartGame = function () {
-        //this.pause();
-        //this.endGame(false, true);
         this.quitToTitle(true);
     };
     Tetris.renderMinos = function (pieceType, canvas, blockSize, color) {
@@ -2119,7 +2133,7 @@ var Tetris = /** @class */ (function () {
     Tetris.prototype.playSound = function (sound) {
         if (!this.configOptions.muteSound) {
             if (sound in this.audioPrompts) {
-                // this seems to be a magic number to kill delay?
+                // this seems to be a magic number to kill (or at least reduce) delay?
                 this.audioPrompts[sound].volume = this.configOptions.audioVolume;
                 this.audioPrompts[sound].currentTime = 0.07;
                 this.audioPrompts[sound].play();
@@ -2157,5 +2171,4 @@ var Tetris = /** @class */ (function () {
 var game;
 window.addEventListener('load', function (event) {
     game = new Tetris();
-    document.getElementById("build-timestamp").innerText = document.lastModified;
 });
